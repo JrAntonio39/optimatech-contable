@@ -1,0 +1,34 @@
+services:
+  optimatech_db:
+    image: postgres:17.6-alpine
+    container_name: optimatech_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: optimatech123
+      POSTGRES_DB: optimatech_db
+    ports:
+      - "5434:5432"
+    volumes:
+      - optimatech_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d optimatech_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  optimatech_pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: optimatech_pgadmin
+    restart: unless-stopped
+    environment:
+      PGADMIN_DEFAULT_EMAIL: jeffer@optimatech.com
+      PGADMIN_DEFAULT_PASSWORD: optimatech123
+    ports:
+      - "5051:80"
+    depends_on:
+      optimatech_db:
+        condition: service_healthy
+
+volumes:
+  optimatech_pgdata:
