@@ -1,24 +1,37 @@
 /**
- * Servicio de reportes contables (solo lectura, vienen de vistas SQL).
- * PENDIENTE: implementar estos endpoints en el backend FastAPI.
- *  - /api/libro-mayor      <- v_libro_mayor
- *  - /api/balanza          <- v_balanza_comprobacion
+ * Servicio de reportes contables (solo lectura).
+ * Backend: app/routers/reportes.py
+ * PENDIENTE en backend:
  *  - /api/balance-general  <- clases 1, 2, 3
  *  - /api/resultados       <- clases 4 y 5 (Pérdidas y Ganancias)
  */
 import { api } from './api.js'
 
 export const reportesService = {
-  /** Libro Mayor: saldos por cuenta. */
+  /** Libro Mayor: totales por cuenta hoja con movimiento. Acepta { periodo_id, q } */
   libroMayor: (params = {}) => {
     const qs = new URLSearchParams()
-    if (params.codigo) qs.set('codigo', params.codigo)
+    if (params.periodo_id) qs.set('periodo_id', params.periodo_id)
+    if (params.q) qs.set('q', params.q)
     const suffix = qs.toString() ? `?${qs.toString()}` : ''
-    return api.get(`/api/libro-mayor${suffix}`)
+    return api.get(`/api/reportes/mayor${suffix}`)
   },
 
-  /** Balanza de Comprobación (cuentas de mayor, nivel 3). */
-  balanza: () => api.get('/api/balanza'),
+  /** Movimientos de una cuenta (mayorización con saldo acumulado). */
+  mayorCuenta: (codigo, periodoId) =>
+    api.get(
+      periodoId
+        ? `/api/reportes/mayor/${encodeURIComponent(codigo)}?periodo_id=${periodoId}`
+        : `/api/reportes/mayor/${encodeURIComponent(codigo)}`
+    ),
+
+  /** Balanza de Comprobación (cuentas de mayor, nivel 3). Acepta periodo_id. */
+  balanza: periodoId =>
+    api.get(
+      periodoId
+        ? `/api/reportes/balanza?periodo_id=${periodoId}`
+        : '/api/reportes/balanza'
+    ),
 
   /** Balance General (Activo = Pasivo + Patrimonio). */
   balanceGeneral: periodoId =>

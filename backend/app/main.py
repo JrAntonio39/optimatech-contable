@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.routers import cuentas, asientos, meta, clientes, facturas, compras, proveedores, empleados, planillas
+from app.routers import cuentas, asientos, meta, reportes, clientes, facturas, compras, proveedores, empleados, planillas
 
 app = FastAPI(title="OptimaTech API", version="1.0", description="API Contable - Catálogo 217 cuentas")
 
@@ -15,6 +15,7 @@ app.add_middleware(
 app.include_router(cuentas.router)
 app.include_router(asientos.router)
 app.include_router(meta.router)
+app.include_router(reportes.router)
 app.include_router(clientes.router)
 app.include_router(facturas.router)
 app.include_router(compras.router)
