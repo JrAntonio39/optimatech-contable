@@ -146,3 +146,124 @@ def balanza(
         "cuadrada": totales["sumas_debe"] == totales["sumas_haber"]
         and totales["saldo_deudor"] == totales["saldo_acreedor"],
     }
+
+
+def _saldos_nivel3(clase: str, db: Session, cond_p: str, par: dict):
+    """Saldos de cuentas de mayor (nivel 3) de una clase, agregando sus hojas.
+
+    clase: '1'..'7'. Devuelve lista {codigo, nombre, rubro, debe, haber}.
+    """
+    params = dict(par)
+    params["pat"] = f"{clase}.%"
+    rows = db.execute(
+        text(f"""
+        SELECT c.codigo, c.nombre, c.codigo_padre AS rubro,
+               COALESCE(SUM(d.debe),0) AS debe,
+               COALESCE(SUM(d.haber),0) AS haber
+          FROM catalogo_cuenta c
+          JOIN detalle_asiento d
+            ON d.cuenta_codigo = c.codigo OR d.cuenta_codigo LIKE c.codigo || '.%'
+          JOIN asiento a ON a.id = d.asiento_id AND a.estado = 'VIGENTE'
+         WHERE c.nivel = 3 AND c.codigo LIKE :pat {cond_p}
+         GROUP BY c.codigo, c.nombre, c.codigo_padre
+        HAVING COALESCE(SUM(d.debe),0) + COALESCE(SUM(d.haber),0) > 0
+         ORDER BY c.codigo
+        """),
+        params,
+    ).mappings().all()
+    out = []
+    for r in rows:
+        r = dict(r)
+        r["debe"] = float(r["debe"])
+        r["haber"] = float(r["haber"])
+        out.append(r)
+    return out
+
+
+@router.get("/resultados", summary="Estado de Pérdidas y Ganancias (5 menos 4)")
+def resultados(
+    db: Session = Depends(get_db),
+    periodo_id: Optional[int] = Query(None, description="Filtrar por periodo"),
+):
+    cond_p, par = _periodo_filtro(periodo_id, db)
+
+    ing = _saldos_nivel3("5", db, cond_p, par)
+    lineas_ing = [
+        {"codigo": l["codigo"], "nombre": l["nombre"],
+         "total": round(l["haber"] - l["debe"], 2)}
+        for l in ing
+    ]
+    total_ing = round(sum(l["total"] for l in lineas_ing), 2)
+
+    gas = _saldos_nivel3("4", db, cond_p, par)
+    lineas_gas = [
+        {"codigo": l["codigo"], "nombre": l["nombre"],
+         "total": round(l["debe"] - l["haber"], 2)}
+        for l in gas
+    ]
+    total_gas = round(sum(l["total"] for l in lineas_gas), 2)
+
+    utilidad = round(total_ing - total_gas, 2)
+    resultado = "UTILIDAD" if utilidad > 0 else ("PERDIDA" if utilidad < 0 else "EQUILIBRIO")
+    return {
+        "periodo_id": periodo_id,
+        "ingresos": {"total": total_ing, "lineas": lineas_ing},
+        "gastos": {"total": total_gas, "lineas": lineas_gas},
+        "utilidad_neta": utilidad,
+        "resultado": resultado,
+    }
+
+
+@router.get("/balance-general", summary="Balance General (1 = 2 + 3 + resultado)")
+def balance_general(
+    db: Session = Depends(get_db),
+    periodo_id: Optional[int] = Query(None, description="Filtrar por periodo"),
+):
+    cond_p, par = _periodo_filtro(periodo_id, db)
+
+    def seccion(clase: str, signo: int):
+        """signo +1: saldo = debe-haber (Activo). -1: saldo = haber-debe."""
+        saldos = _saldos_nivel3(clase, db, cond_p, par)
+        por_rubro: dict = {}
+        for l in saldos:
+            s = round(signo * (l["debe"] - l["haber"]), 2)
+            rub = por_rubro.setdefault(
+                l["rubro"],
+                {"codigo": l["rubro"], "nombre": "", "saldo": 0.0, "lineas": []},
+            )
+            rub["lineas"].append({"codigo": l["codigo"], "nombre": l["nombre"], "saldo": s})
+            rub["saldo"] = round(rub["saldo"] + s, 2)
+        nombres = {
+            r["codigo"]: r["nombre"]
+            for r in db.execute(
+                text("SELECT codigo, nombre FROM catalogo_cuenta WHERE nivel = 2")
+            ).mappings().all()
+        }
+        rubros = []
+        for cod in sorted(por_rubro):
+            por_rubro[cod]["nombre"] = nombres.get(cod, "")
+            rubros.append(por_rubro[cod])
+        return rubros, round(sum(r["saldo"] for r in rubros), 2)
+
+    rub_act, tot_act = seccion("1", +1)
+    rub_pas, tot_pas = seccion("2", -1)
+    rub_pat, tot_pat_rub = seccion("3", -1)
+
+    res = resultados(db=db, periodo_id=periodo_id)
+    utilidad = res["utilidad_neta"]
+    tot_pat = round(tot_pat_rub + utilidad, 2)
+    tot_pas_pat = round(tot_pas + tot_pat, 2)
+    diferencia = round(tot_act - tot_pas_pat, 2)
+    return {
+        "periodo_id": periodo_id,
+        "activo": {"total": tot_act, "rubros": rub_act},
+        "pasivo": {"total": tot_pas, "rubros": rub_pas},
+        "patrimonio": {
+            "total": tot_pat,
+            "rubros": rub_pat,
+            "resultado_ejercicio": utilidad,
+        },
+        "total_pasivo_patrimonio": tot_pas_pat,
+        "cuadrado": diferencia == 0,
+        "diferencia": diferencia,
+    }

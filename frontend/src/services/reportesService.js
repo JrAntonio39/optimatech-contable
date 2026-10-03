@@ -33,17 +33,19 @@ export const reportesService = {
         : '/api/reportes/balanza'
     ),
 
-  /** Balance General (Activo = Pasivo + Patrimonio). */
+  /** Balance General (Activo = Pasivo + Patrimonio + resultado). */
   balanceGeneral: periodoId =>
     api.get(
       periodoId
-        ? `/api/balance-general?periodo_id=${periodoId}`
-        : '/api/balance-general'
+        ? `/api/reportes/balance-general?periodo_id=${periodoId}`
+        : '/api/reportes/balance-general'
     ),
 
   /** Estado de Pérdidas y Ganancias (ingresos 5.x menos costos/gastos 4.x). */
   resultados: periodoId =>
     api.get(
-      periodoId ? `/api/resultados?periodo_id=${periodoId}` : '/api/resultados'
+      periodoId
+        ? `/api/reportes/resultados?periodo_id=${periodoId}`
+        : '/api/reportes/resultados'
     )
 }
