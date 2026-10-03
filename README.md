@@ -24,6 +24,10 @@ cd APP_Optimal_TECH
 docker compose up -d
 # Verifica: docker ps  ->  optimatech_db en 5434
 
+# 2b. Cargar esquema + datos (217 cuentas del catálogo y tablas del sistema)
+# Solo la primera vez (o para resetear la BD):
+docker exec -i optimatech_db psql -U postgres -d optimatech_db < db/optimatech_init.sql
+
 # 3. Backend
 cd backend
 python3 -m venv .venv && source .venv/bin/activate
