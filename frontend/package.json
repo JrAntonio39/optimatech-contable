@@ -1,7 +1,7 @@
 {
   "name": "frontend",
   "version": "0.0.1",
-  "private": true,
+  "private": "true",
   "description": "A Quasar Project",
   "keywords": [
     "quasar",
@@ -39,3 +39,4 @@
   },
   "productName": "Quasar App"
 }
+
