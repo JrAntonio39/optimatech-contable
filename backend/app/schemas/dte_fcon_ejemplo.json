@@ -1,0 +1,115 @@
+{
+    "identificacion": {
+        "version": 2,
+        "ambiente": "00",
+        "tipoDte": "01",
+        "numeroControl":"DTE-01-S002P001-000000000000001",
+        "codigoGeneracion":"6374196E-2633-4449-805E-AA3C1CDD74B6",
+        "tipoModelo":1,
+        "tipoOperacion":1,
+        "tipoContingencia":null,
+        "motivoContin":null,
+        "fechaEmi":"2026-10-18",
+        "horaEmi":"13:15:00",
+        "tipoMoneda":"USD"
+    },
+    "documentoRelacionado": null,
+    "emisor": {
+        "nit":"0614-290826-001-5",
+        "nrc":"123456-7",
+        "nombre":"OptimaTech Empresarial",
+        "codActividad":"62020",
+        "descActividad":"Actividades de consultoría de informática y de gestión de instalaciones informáticas",
+        "nombreComercial":"OptimaTech Empresarial, S.A. de C.V.",
+        "direccion": {
+            "departamento":"06",
+            "municipio":"21",
+            "distrito": "San Salvador",
+            "complemento": "Colonia X"
+        },
+        "telefono":"7752-2031",
+        "correo":"optimatech@gmail.com",
+        "codEstable":null,
+        "codPuntoVenta":null  
+    },
+    "receptor": {
+        "tipoDocumento":"13",
+        "numDocumento":"012345678",
+        "nrc":"123456-0",
+        "nombre": "Nombre del cliente",
+        "codActividad":"10005",
+        "descActividad":"Otros",    
+        "direccion": {
+            "departamento":"07",
+            "municipio":"12",
+            "distrito":"San Salvador",
+            "complemento": "Colonia Y"
+        },
+        "telefono":"7352-4043",
+        "correo":"cliente@gmail.com"
+    },
+    "otrosDocumentos":null,
+    "ventaTerceros":null,
+    "cuerpoDocumento": [{
+        "numItem":1,
+        "tipoItem":"1",  
+        "numDocumento":null,
+        "cantidad":5,
+        "codigo":"ITEM-001",
+        "codTributo":null,
+        "uniMedida":59,
+        "descripcion":"Descripción del Producto",
+        "precioUni":10.00,
+        "montoDescu":0.00,
+        "ventaNoSuj":0.00,
+        "ventaExenta":0.00,
+        "ventaGravada":50.00,
+        "tributos":null,
+        "psv":0.00,
+        "noGravado":0.00,
+        "ivaItem":6.50
+    }],
+    "resumen": {
+        "totalNoSuj":0.00,
+        "totalExenta":0.00,
+        "totalGravada":50.00,
+        "subTotalVentas":50.00,
+        "descuNoSuj":0.00,
+        "descuExenta":0.00,
+        "descuGravada":0.00,
+        "porcentajeDescuento":0.00,
+        "totalDescu":0.00,
+        "tributos": [],
+        "subTotal":50.00,
+        "ivaRete":0.00, 
+        "reteRenta":0.00,
+        "montoTotalOperacion":50.00,
+        "totalNoGravado":0.00,
+        "totalPagar":50.00,
+        "totalLetras":"CINCUENTA USD",
+        "totalIva":6.51,
+        "saldoFavor":0.00,
+        "condicionOperacion":1,
+        "pagos": {
+            "codigo":"01",
+            "montoPago":50.00,
+            "pagosReferencia":null,
+            "plazo":null,
+            "periodo":null
+        },
+        "numPagoElectronico":null
+    },
+    "extension": {
+        "nombEntrega":null,
+        "docuEntrega":null,
+        "nombreRecibe":null,
+        "docuRecibe":null,
+        "placaVehiculo":null,
+        "observaciones":null
+    },
+    "apendice": {
+        "campo":null,
+        "etiqueta":null,
+        "valor":null
+    }
+}
