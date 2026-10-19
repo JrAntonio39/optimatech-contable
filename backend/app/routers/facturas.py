@@ -20,7 +20,7 @@ def listar_facturas(db: Session = Depends(get_db)):
 
 @router.get("/{factura_id}")
 def get_factura(factura_id: int, db: Session = Depends(get_db)):
-    rows = db.execute(text(f"SELECT * FROM factura WHERE id = {factura_id} ORDER BY fecha DESC")).mappings().all()
+    rows = db.execute(text(f"SELECT * FROM factura WHERE id = '{factura_id}' ORDER BY fecha DESC")).mappings().all()
     
     if(len(rows) == 0):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Factura No Encontrada")
@@ -47,7 +47,7 @@ def crear_detalles_factura(factura_id: int, items_factura: list[ItemFactura], db
 
         detalle_agregado = db.execute(text(
             f"""INSERT INTO factura_detalle (factura_id, descripcion, cantidad, precio_unitario, cuenta_ingreso_codigo) 
-            VALUES ({factura_id}, {item.descripcion}, {item.cantidad}, {item.precioUni}, {codigo_cuenta})
+            VALUES ({factura_id}, '{item.descripcion}', {item.cantidad}, {item.precioUni}, '{codigo_cuenta}')
             RETURNING * """
         )).mappings().one()
 
