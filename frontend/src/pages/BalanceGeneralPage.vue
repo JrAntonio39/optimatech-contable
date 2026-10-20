@@ -2,8 +2,13 @@
   <q-page padding>
     <div class="row items-center q-mb-md">
       <div class="text-h5">Balance General</div>
-      <q-badge :color="datos.cuadrado ? 'positive' : 'negative'" class="q-ml-sm">
-        {{ datos.cuadrado ? 'CUADRADO' : `DIFERENCIA ${fmt(datos.diferencia)}` }}
+      <q-badge
+        :color="datos.cuadrado ? 'positive' : 'negative'"
+        class="q-ml-sm"
+      >
+        {{
+          datos.cuadrado ? 'CUADRADO' : `DIFERENCIA ${fmt(datos.diferencia)}`
+        }}
       </q-badge>
     </div>
 
@@ -58,7 +63,9 @@
         <q-card-section class="row items-center">
           <div class="text-subtitle1">PATRIMONIO</div>
           <q-space />
-          <q-chip color="purple-3">Total: {{ fmt(datos.patrimonio.total) }}</q-chip>
+          <q-chip color="purple-3"
+            >Total: {{ fmt(datos.patrimonio.total) }}</q-chip
+          >
         </q-card-section>
         <q-card-section
           v-for="r in datos.patrimonio.rubros"
@@ -80,7 +87,9 @@
         <q-card-section class="row items-center">
           <div>Resultado del ejercicio (de Pérdidas y Ganancias)</div>
           <q-space />
-          <span class="text-weight-medium">{{ fmt(datos.patrimonio.resultado_ejercicio) }}</span>
+          <span class="text-weight-medium">{{
+            fmt(datos.patrimonio.resultado_ejercicio)
+          }}</span>
         </q-card-section>
       </q-card>
     </template>
@@ -114,7 +123,9 @@ async function cargar() {
   cargando.value = true
   error.value = ''
   try {
-    datos.value = await reportesService.balanceGeneral(filtroPeriodo.value || undefined)
+    datos.value = await reportesService.balanceGeneral(
+      filtroPeriodo.value || undefined
+    )
   } catch (e) {
     error.value = `No se pudo cargar el balance. (${e.message})`
   } finally {

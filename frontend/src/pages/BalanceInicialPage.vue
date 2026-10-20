@@ -45,8 +45,19 @@
               @click="alternar(props)"
             />
           </q-td>
-          <q-td v-for="col in props.cols.filter(c => c.name !== 'expand')" :key="col.name" :props="props">
-            <q-badge v-if="col.name === 'estado_partida'" :color="props.row.estado_partida === 'CUADRADO' ? 'positive' : 'negative'">
+          <q-td
+            v-for="col in props.cols.filter(c => c.name !== 'expand')"
+            :key="col.name"
+            :props="props"
+          >
+            <q-badge
+              v-if="col.name === 'estado_partida'"
+              :color="
+                props.row.estado_partida === 'CUADRADO'
+                  ? 'positive'
+                  : 'negative'
+              "
+            >
               {{ col.value }}
             </q-badge>
             <span v-else>{{ col.value }}</span>
@@ -56,20 +67,42 @@
           <q-td colspan="100%">
             <div v-if="detalles[props.row.id]">
               <div class="q-mb-sm">
-                <q-chip color="blue-1">Debe: {{ detalles[props.row.id].total_debe.toFixed(2) }}</q-chip>
-                <q-chip color="orange-1">Haber: {{ detalles[props.row.id].total_haber.toFixed(2) }}</q-chip>
-                <q-chip :color="detalles[props.row.id].estado_partida === 'CUADRADO' ? 'green-3' : 'red-3'">
+                <q-chip color="blue-1"
+                  >Debe:
+                  {{ detalles[props.row.id].total_debe.toFixed(2) }}</q-chip
+                >
+                <q-chip color="orange-1"
+                  >Haber:
+                  {{ detalles[props.row.id].total_haber.toFixed(2) }}</q-chip
+                >
+                <q-chip
+                  :color="
+                    detalles[props.row.id].estado_partida === 'CUADRADO'
+                      ? 'green-3'
+                      : 'red-3'
+                  "
+                >
                   {{ detalles[props.row.id].estado_partida }}
                 </q-chip>
               </div>
               <q-list dense bordered separator>
-                <q-item v-for="l in detalles[props.row.id].detalles" :key="l.id">
+                <q-item
+                  v-for="l in detalles[props.row.id].detalles"
+                  :key="l.id"
+                >
                   <q-item-section>
-                    <q-item-label>{{ l.cuenta_codigo }} · {{ l.cuenta_nombre }}</q-item-label>
-                    <q-item-label v-if="l.descripcion" caption>{{ l.descripcion }}</q-item-label>
+                    <q-item-label
+                      >{{ l.cuenta_codigo }} ·
+                      {{ l.cuenta_nombre }}</q-item-label
+                    >
+                    <q-item-label v-if="l.descripcion" caption>{{
+                      l.descripcion
+                    }}</q-item-label>
                   </q-item-section>
                   <q-item-section side>
-                    <span v-if="l.debe > 0">Debe {{ Number(l.debe).toFixed(2) }}</span>
+                    <span v-if="l.debe > 0"
+                      >Debe {{ Number(l.debe).toFixed(2) }}</span
+                    >
                     <span v-else>Haber {{ Number(l.haber).toFixed(2) }}</span>
                   </q-item-section>
                 </q-item>
@@ -97,18 +130,41 @@ const error = ref('')
 
 const columnas = [
   { name: 'expand', label: '', field: 'expand', align: 'center' },
-  { name: 'codigo', label: 'Folio', field: 'codigo', align: 'left', sortable: true },
-  { name: 'fecha', label: 'Fecha', field: 'fecha', align: 'left', sortable: true },
+  {
+    name: 'codigo',
+    label: 'Folio',
+    field: 'codigo',
+    align: 'left',
+    sortable: true
+  },
+  {
+    name: 'fecha',
+    label: 'Fecha',
+    field: 'fecha',
+    align: 'left',
+    sortable: true
+  },
   { name: 'concepto', label: 'Concepto', field: 'concepto', align: 'left' },
   {
-    name: 'total_debe', label: 'Debe', field: 'total_debe',
-    align: 'right', format: v => Number(v).toFixed(2)
+    name: 'total_debe',
+    label: 'Debe',
+    field: 'total_debe',
+    align: 'right',
+    format: v => Number(v).toFixed(2)
   },
   {
-    name: 'total_haber', label: 'Haber', field: 'total_haber',
-    align: 'right', format: v => Number(v).toFixed(2)
+    name: 'total_haber',
+    label: 'Haber',
+    field: 'total_haber',
+    align: 'right',
+    format: v => Number(v).toFixed(2)
   },
-  { name: 'estado_partida', label: 'Estado', field: 'estado_partida', align: 'center' }
+  {
+    name: 'estado_partida',
+    label: 'Estado',
+    field: 'estado_partida',
+    align: 'center'
+  }
 ]
 
 function irARegistrar() {

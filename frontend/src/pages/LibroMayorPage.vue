@@ -79,9 +79,15 @@
           no-data-label="Sin movimientos"
         />
         <q-card-section class="row items-center q-gutter-md">
-          <q-chip color="blue-1">Debe: {{ detalle.total_debe.toFixed(2) }}</q-chip>
-          <q-chip color="orange-1">Haber: {{ detalle.total_haber.toFixed(2) }}</q-chip>
-          <q-chip color="green-3">Saldo: {{ detalle.saldo_final.toFixed(2) }}</q-chip>
+          <q-chip color="blue-1"
+            >Debe: {{ detalle.total_debe.toFixed(2) }}</q-chip
+          >
+          <q-chip color="orange-1"
+            >Haber: {{ detalle.total_haber.toFixed(2) }}</q-chip
+          >
+          <q-chip color="green-3"
+            >Saldo: {{ detalle.saldo_final.toFixed(2) }}</q-chip
+          >
         </q-card-section>
       </q-card>
     </div>
@@ -117,20 +123,40 @@ const cargando = ref(false)
 const error = ref('')
 
 const columnas = [
-  { name: 'codigo', label: 'Código', field: 'codigo', align: 'left', sortable: true },
+  {
+    name: 'codigo',
+    label: 'Código',
+    field: 'codigo',
+    align: 'left',
+    sortable: true
+  },
   { name: 'nombre', label: 'Nombre', field: 'nombre', align: 'left' },
-  { name: 'naturaleza', label: 'Naturaleza', field: 'naturaleza', align: 'left' },
   {
-    name: 'total_debe', label: 'Debe', field: 'total_debe',
-    align: 'right', format: v => Number(v).toFixed(2)
+    name: 'naturaleza',
+    label: 'Naturaleza',
+    field: 'naturaleza',
+    align: 'left'
   },
   {
-    name: 'total_haber', label: 'Haber', field: 'total_haber',
-    align: 'right', format: v => Number(v).toFixed(2)
+    name: 'total_debe',
+    label: 'Debe',
+    field: 'total_debe',
+    align: 'right',
+    format: v => Number(v).toFixed(2)
   },
   {
-    name: 'saldo', label: 'Saldo', field: 'saldo',
-    align: 'right', format: v => Number(v).toFixed(2)
+    name: 'total_haber',
+    label: 'Haber',
+    field: 'total_haber',
+    align: 'right',
+    format: v => Number(v).toFixed(2)
+  },
+  {
+    name: 'saldo',
+    label: 'Saldo',
+    field: 'saldo',
+    align: 'right',
+    format: v => Number(v).toFixed(2)
   }
 ]
 
@@ -140,16 +166,25 @@ const columnasMov = [
   { name: 'concepto', label: 'Concepto', field: 'concepto', align: 'left' },
   { name: 'tipo', label: 'Tipo', field: 'tipo', align: 'center' },
   {
-    name: 'debe', label: 'Debe', field: 'debe',
-    align: 'right', format: v => Number(v).toFixed(2)
+    name: 'debe',
+    label: 'Debe',
+    field: 'debe',
+    align: 'right',
+    format: v => Number(v).toFixed(2)
   },
   {
-    name: 'haber', label: 'Haber', field: 'haber',
-    align: 'right', format: v => Number(v).toFixed(2)
+    name: 'haber',
+    label: 'Haber',
+    field: 'haber',
+    align: 'right',
+    format: v => Number(v).toFixed(2)
   },
   {
-    name: 'saldo_acumulado', label: 'Saldo', field: 'saldo_acumulado',
-    align: 'right', format: v => Number(v).toFixed(2)
+    name: 'saldo_acumulado',
+    label: 'Saldo',
+    field: 'saldo_acumulado',
+    align: 'right',
+    format: v => Number(v).toFixed(2)
   }
 ]
 

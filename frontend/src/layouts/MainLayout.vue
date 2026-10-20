@@ -16,9 +16,33 @@
           <span class="opti-subtitle">Sistema Contable</span>
         </q-toolbar-title>
 
-        <q-badge color="green-3" text-color="dark" class="q-mr-sm">
+        <q-space />
+
+        <q-badge :color="apiStatusColor" text-color="dark" class="q-mr-sm">
           {{ apiStatus }}
         </q-badge>
+
+        <q-btn
+          v-if="auth.estaAutenticado"
+          flat
+          dense
+          round
+          color="primary"
+          label="Modo oscuro"
+          icon="dark_mode"
+          @click="toggleDark"
+        />
+
+        <q-btn
+          v-if="auth.estaAutenticado"
+          flat
+          dense
+          round
+          color="negative"
+          label="Salir"
+          icon="logout"
+          @click="logout"
+        />
       </q-toolbar>
     </q-header>
 
@@ -63,6 +87,16 @@
             </q-item-section>
           </q-item>
         </template>
+
+        <q-separator spaced />
+
+        <div class="q-pa-sm" v-if="auth.estaAutenticado">
+          <div class="text-caption text-grey-7">
+            {{ auth.usuario?.nombre_completo }} ({{
+              auth.usuario?.rol_codigos?.join(', ')
+            }})
+          </div>
+        </div>
       </q-list>
     </q-drawer>
 
@@ -73,16 +107,35 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { MENU_SECTIONS } from '@/constants/menu.js'
 import { API_BASE_URL } from '@/services/api.js'
+import { useQuasar } from 'quasar'
+import { useRouter } from 'vue-router'
+import { useAuthStore } from '@/stores/auth.js'
 
 const menuSections = MENU_SECTIONS
 const leftDrawerOpen = ref(false)
 const apiStatus = ref('API: verificando…')
+const auth = useAuthStore()
+const $q = useQuasar()
+const router = useRouter()
+
+const apiStatusColor = computed(() =>
+  apiStatus.value.includes('en línea') ? 'green-3' : 'red-3'
+)
 
 function toggleLeftDrawer() {
   leftDrawerOpen.value = !leftDrawerOpen.value
+}
+
+function toggleDark() {
+  $q.dark.set(!$q.dark.isActive)
+}
+
+async function logout() {
+  auth.logout()
+  router.push('/login')
 }
 
 onMounted(async () => {

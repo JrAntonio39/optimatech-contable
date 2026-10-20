@@ -8,9 +8,17 @@
 
 export const API_BASE_URL = import.meta.env.VITE_API_URL ?? ''
 
+function getAuthHeader() {
+  const token = localStorage.getItem('token')
+  return token ? { Authorization: `Bearer ${token}` } : {}
+}
+
 async function request(path, options = {}) {
   const res = await fetch(`${API_BASE_URL}${path}`, {
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      ...getAuthHeader()
+    },
     ...options,
     body: options.body ? JSON.stringify(options.body) : undefined
   })
@@ -30,4 +38,21 @@ export const api = {
   post: (path, body) => request(path, { method: 'POST', body }),
   put: (path, body) => request(path, { method: 'PUT', body }),
   del: path => request(path, { method: 'DELETE' })
+}
+
+// Helper para login (usa form-data, no JSON)
+export async function loginRequest(username, password) {
+  const form = new URLSearchParams()
+  form.append('username', username)
+  form.append('password', password)
+  const res = await fetch(`${API_BASE_URL}/api/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: form.toString()
+  })
+  if (!res.ok) {
+    const detail = await res.text().catch(() => '')
+    throw new Error(`API ${res.status}: ${detail || res.statusText}`)
+  }
+  return res.json()
 }

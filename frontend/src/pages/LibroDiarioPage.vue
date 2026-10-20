@@ -92,9 +92,22 @@
               @click="alternar(props)"
             />
           </q-td>
-          <q-td v-for="col in props.cols.filter(c => c.name !== 'expand')" :key="col.name" :props="props">
-            <q-badge v-if="col.name === 'tipo'" color="blue-8">{{ col.value }}</q-badge>
-            <q-badge v-else-if="col.name === 'estado_partida'" :color="props.row.estado_partida === 'CUADRADO' ? 'positive' : 'negative'">
+          <q-td
+            v-for="col in props.cols.filter(c => c.name !== 'expand')"
+            :key="col.name"
+            :props="props"
+          >
+            <q-badge v-if="col.name === 'tipo'" color="blue-8">{{
+              col.value
+            }}</q-badge>
+            <q-badge
+              v-else-if="col.name === 'estado_partida'"
+              :color="
+                props.row.estado_partida === 'CUADRADO'
+                  ? 'positive'
+                  : 'negative'
+              "
+            >
               {{ col.value }}
             </q-badge>
             <span v-else>{{ col.value }}</span>
@@ -104,13 +117,23 @@
           <q-td colspan="100%">
             <div v-if="detalles[props.row.id]">
               <q-list dense bordered separator>
-                <q-item v-for="l in detalles[props.row.id].detalles" :key="l.id">
+                <q-item
+                  v-for="l in detalles[props.row.id].detalles"
+                  :key="l.id"
+                >
                   <q-item-section>
-                    <q-item-label>{{ l.cuenta_codigo }} · {{ l.cuenta_nombre }}</q-item-label>
-                    <q-item-label v-if="l.descripcion" caption>{{ l.descripcion }}</q-item-label>
+                    <q-item-label
+                      >{{ l.cuenta_codigo }} ·
+                      {{ l.cuenta_nombre }}</q-item-label
+                    >
+                    <q-item-label v-if="l.descripcion" caption>{{
+                      l.descripcion
+                    }}</q-item-label>
                   </q-item-section>
                   <q-item-section side>
-                    <span v-if="l.debe > 0">Debe {{ Number(l.debe).toFixed(2) }}</span>
+                    <span v-if="l.debe > 0"
+                      >Debe {{ Number(l.debe).toFixed(2) }}</span
+                    >
                     <span v-else>Haber {{ Number(l.haber).toFixed(2) }}</span>
                   </q-item-section>
                 </q-item>
@@ -151,19 +174,42 @@ const tipos = [
 
 const columnas = [
   { name: 'expand', label: '', field: 'expand', align: 'center' },
-  { name: 'codigo', label: 'Folio', field: 'codigo', align: 'left', sortable: true },
-  { name: 'fecha', label: 'Fecha', field: 'fecha', align: 'left', sortable: true },
+  {
+    name: 'codigo',
+    label: 'Folio',
+    field: 'codigo',
+    align: 'left',
+    sortable: true
+  },
+  {
+    name: 'fecha',
+    label: 'Fecha',
+    field: 'fecha',
+    align: 'left',
+    sortable: true
+  },
   { name: 'concepto', label: 'Concepto', field: 'concepto', align: 'left' },
   { name: 'tipo', label: 'Tipo', field: 'tipo', align: 'center' },
   {
-    name: 'total_debe', label: 'Debe', field: 'total_debe',
-    align: 'right', format: v => Number(v).toFixed(2)
+    name: 'total_debe',
+    label: 'Debe',
+    field: 'total_debe',
+    align: 'right',
+    format: v => Number(v).toFixed(2)
   },
   {
-    name: 'total_haber', label: 'Haber', field: 'total_haber',
-    align: 'right', format: v => Number(v).toFixed(2)
+    name: 'total_haber',
+    label: 'Haber',
+    field: 'total_haber',
+    align: 'right',
+    format: v => Number(v).toFixed(2)
   },
-  { name: 'estado_partida', label: 'Estado', field: 'estado_partida', align: 'center' }
+  {
+    name: 'estado_partida',
+    label: 'Estado',
+    field: 'estado_partida',
+    align: 'center'
+  }
 ]
 
 const sumaDebe = computed(() =>

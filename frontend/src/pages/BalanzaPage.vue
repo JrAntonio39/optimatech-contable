@@ -29,10 +29,18 @@
         />
       </div>
       <div class="col-12 col-md-8 row items-center q-gutter-md">
-        <q-chip color="blue-1">Sumas debe: {{ fmt(totales.sumas_debe) }}</q-chip>
-        <q-chip color="orange-1">Sumas haber: {{ fmt(totales.sumas_haber) }}</q-chip>
-        <q-chip color="green-3">Saldos deudores: {{ fmt(totales.saldo_deudor) }}</q-chip>
-        <q-chip color="purple-3">Saldos acreedores: {{ fmt(totales.saldo_acreedor) }}</q-chip>
+        <q-chip color="blue-1"
+          >Sumas debe: {{ fmt(totales.sumas_debe) }}</q-chip
+        >
+        <q-chip color="orange-1"
+          >Sumas haber: {{ fmt(totales.sumas_haber) }}</q-chip
+        >
+        <q-chip color="green-3"
+          >Saldos deudores: {{ fmt(totales.saldo_deudor) }}</q-chip
+        >
+        <q-chip color="purple-3"
+          >Saldos acreedores: {{ fmt(totales.saldo_acreedor) }}</q-chip
+        >
       </div>
     </div>
 
@@ -59,7 +67,12 @@ import { reportesService } from '@/services/reportesService.js'
 import { asientosService } from '@/services/asientosService.js'
 
 const lineas = ref([])
-const totales = ref({ sumas_debe: 0, sumas_haber: 0, saldo_deudor: 0, saldo_acreedor: 0 })
+const totales = ref({
+  sumas_debe: 0,
+  sumas_haber: 0,
+  saldo_deudor: 0,
+  saldo_acreedor: 0
+})
 const cuadrada = ref(true)
 const total = ref(0)
 const cargando = ref(false)
@@ -68,23 +81,41 @@ const filtroPeriodo = ref(null)
 const periodos = ref([])
 
 const columnas = [
-  { name: 'codigo', label: 'Código', field: 'codigo', align: 'left', sortable: true },
+  {
+    name: 'codigo',
+    label: 'Código',
+    field: 'codigo',
+    align: 'left',
+    sortable: true
+  },
   { name: 'nombre', label: 'Nombre', field: 'nombre', align: 'left' },
   {
-    name: 'sumas_debe', label: 'Sumas Debe', field: 'sumas_debe',
-    align: 'right', format: v => Number(v).toFixed(2)
+    name: 'sumas_debe',
+    label: 'Sumas Debe',
+    field: 'sumas_debe',
+    align: 'right',
+    format: v => Number(v).toFixed(2)
   },
   {
-    name: 'sumas_haber', label: 'Sumas Haber', field: 'sumas_haber',
-    align: 'right', format: v => Number(v).toFixed(2)
+    name: 'sumas_haber',
+    label: 'Sumas Haber',
+    field: 'sumas_haber',
+    align: 'right',
+    format: v => Number(v).toFixed(2)
   },
   {
-    name: 'saldo_deudor', label: 'Saldo Deudor', field: 'saldo_deudor',
-    align: 'right', format: v => Number(v).toFixed(2)
+    name: 'saldo_deudor',
+    label: 'Saldo Deudor',
+    field: 'saldo_deudor',
+    align: 'right',
+    format: v => Number(v).toFixed(2)
   },
   {
-    name: 'saldo_acreedor', label: 'Saldo Acreedor', field: 'saldo_acreedor',
-    align: 'right', format: v => Number(v).toFixed(2)
+    name: 'saldo_acreedor',
+    label: 'Saldo Acreedor',
+    field: 'saldo_acreedor',
+    align: 'right',
+    format: v => Number(v).toFixed(2)
   }
 ]
 

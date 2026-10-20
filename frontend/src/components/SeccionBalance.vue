@@ -5,11 +5,7 @@
       <q-space />
       <q-chip :color="color" text-color="white">Total: {{ fmt(total) }}</q-chip>
     </q-card-section>
-    <q-card-section
-      v-for="r in rubros"
-      :key="r.codigo"
-      class="q-pt-none"
-    >
+    <q-card-section v-for="r in rubros" :key="r.codigo" class="q-pt-none">
       <div class="row items-center q-mb-xs">
         <div class="text-subtitle2">{{ r.codigo }} · {{ r.nombre }}</div>
         <q-space />

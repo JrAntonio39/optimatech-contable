@@ -59,7 +59,9 @@
 
       <q-card class="opti-card">
         <q-card-section class="row items-center q-gutter-md">
-          <q-chip color="green-2">Ingresos: {{ fmt(datos.ingresos.total) }}</q-chip>
+          <q-chip color="green-2"
+            >Ingresos: {{ fmt(datos.ingresos.total) }}</q-chip
+          >
           <q-chip color="red-2">Gastos: {{ fmt(datos.gastos.total) }}</q-chip>
           <q-chip :color="badgeColor" text-color="white">
             {{ datos.resultado }} neta: {{ fmt(datos.utilidad_neta) }}
@@ -90,8 +92,11 @@ const columnas = [
   { name: 'codigo', label: 'Código', field: 'codigo', align: 'left' },
   { name: 'nombre', label: 'Cuenta', field: 'nombre', align: 'left' },
   {
-    name: 'total', label: 'Total', field: 'total',
-    align: 'right', format: v => Number(v).toFixed(2)
+    name: 'total',
+    label: 'Total',
+    field: 'total',
+    align: 'right',
+    format: v => Number(v).toFixed(2)
   }
 ]
 
@@ -111,7 +116,9 @@ async function cargar() {
   cargando.value = true
   error.value = ''
   try {
-    datos.value = await reportesService.resultados(filtroPeriodo.value || undefined)
+    datos.value = await reportesService.resultados(
+      filtroPeriodo.value || undefined
+    )
   } catch (e) {
     error.value = `No se pudo cargar resultados. (${e.message})`
   } finally {
