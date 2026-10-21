@@ -41,7 +41,15 @@ const routes = [
         component: () => import('@/pages/FacturacionPage.vue')
       },
       { path: 'compras', component: () => import('@/pages/ComprasPage.vue') },
-      { path: 'planilla', component: () => import('@/pages/PlanillaPage.vue') }
+      { path: 'planilla', component: () => import('@/pages/PlanillaPage.vue') },
+      {
+        path: 'control',
+        component: () => import('@/pages/ControlPage.vue')
+      },
+      {
+        path: 'usuarios',
+        component: () => import('@/pages/UsuariosPage.vue')
+      }
     ]
   },
 

@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict DfF5PhvuDI4Awcjg32gR1OmT3KPRTfMJDJNvc7vDgcZZCmgG7BGzbWDAUowFl5I
+\restrict MJRlvMcCLV4AVCra0WQYSHj5bM4ac4QdrcFRAAMAqTkNKIeRLcXs3vcvqKumXr7
 
 -- Dumped from database version 17.6
 -- Dumped by pg_dump version 17.6
@@ -30,13 +30,17 @@ ALTER TABLE IF EXISTS ONLY public.planilla DROP CONSTRAINT IF EXISTS planilla_su
 ALTER TABLE IF EXISTS ONLY public.planilla DROP CONSTRAINT IF EXISTS planilla_periodo_id_fkey;
 ALTER TABLE IF EXISTS ONLY public.planilla_detalle DROP CONSTRAINT IF EXISTS planilla_detalle_planilla_id_fkey;
 ALTER TABLE IF EXISTS ONLY public.planilla_detalle DROP CONSTRAINT IF EXISTS planilla_detalle_empleado_id_fkey;
+ALTER TABLE IF EXISTS ONLY public.planilla DROP CONSTRAINT IF EXISTS planilla_creado_por_fkey;
 ALTER TABLE IF EXISTS ONLY public.planilla DROP CONSTRAINT IF EXISTS planilla_asiento_id_fkey;
+ALTER TABLE IF EXISTS ONLY public.planilla DROP CONSTRAINT IF EXISTS planilla_aprobado_por_fkey;
 ALTER TABLE IF EXISTS ONLY public.factura DROP CONSTRAINT IF EXISTS factura_sucursal_id_fkey;
 ALTER TABLE IF EXISTS ONLY public.factura DROP CONSTRAINT IF EXISTS factura_periodo_id_fkey;
 ALTER TABLE IF EXISTS ONLY public.factura_detalle DROP CONSTRAINT IF EXISTS factura_detalle_factura_id_fkey;
 ALTER TABLE IF EXISTS ONLY public.factura_detalle DROP CONSTRAINT IF EXISTS factura_detalle_cuenta_ingreso_codigo_fkey;
+ALTER TABLE IF EXISTS ONLY public.factura DROP CONSTRAINT IF EXISTS factura_creado_por_fkey;
 ALTER TABLE IF EXISTS ONLY public.factura DROP CONSTRAINT IF EXISTS factura_cliente_id_fkey;
 ALTER TABLE IF EXISTS ONLY public.factura DROP CONSTRAINT IF EXISTS factura_asiento_id_fkey;
+ALTER TABLE IF EXISTS ONLY public.factura DROP CONSTRAINT IF EXISTS factura_aprobado_por_fkey;
 ALTER TABLE IF EXISTS ONLY public.empleado DROP CONSTRAINT IF EXISTS empleado_sucursal_id_fkey;
 ALTER TABLE IF EXISTS ONLY public.empleado DROP CONSTRAINT IF EXISTS empleado_cuenta_anticipo_codigo_fkey;
 ALTER TABLE IF EXISTS ONLY public.detalle_asiento DROP CONSTRAINT IF EXISTS detalle_asiento_cuenta_codigo_fkey;
@@ -46,12 +50,19 @@ ALTER TABLE IF EXISTS ONLY public.compra DROP CONSTRAINT IF EXISTS compra_provee
 ALTER TABLE IF EXISTS ONLY public.compra DROP CONSTRAINT IF EXISTS compra_periodo_id_fkey;
 ALTER TABLE IF EXISTS ONLY public.compra_detalle DROP CONSTRAINT IF EXISTS compra_detalle_cuenta_activo_codigo_fkey;
 ALTER TABLE IF EXISTS ONLY public.compra_detalle DROP CONSTRAINT IF EXISTS compra_detalle_compra_id_fkey;
+ALTER TABLE IF EXISTS ONLY public.compra DROP CONSTRAINT IF EXISTS compra_creado_por_fkey;
 ALTER TABLE IF EXISTS ONLY public.compra DROP CONSTRAINT IF EXISTS compra_asiento_id_fkey;
+ALTER TABLE IF EXISTS ONLY public.compra DROP CONSTRAINT IF EXISTS compra_aprobado_por_fkey;
 ALTER TABLE IF EXISTS ONLY public.cliente DROP CONSTRAINT IF EXISTS cliente_sucursal_id_fkey;
 ALTER TABLE IF EXISTS ONLY public.cliente DROP CONSTRAINT IF EXISTS cliente_cuenta_codigo_fkey;
 ALTER TABLE IF EXISTS ONLY public.catalogo_cuenta DROP CONSTRAINT IF EXISTS catalogo_cuenta_codigo_padre_fkey;
+ALTER TABLE IF EXISTS ONLY public.auditoria DROP CONSTRAINT IF EXISTS auditoria_usuario_id_fkey;
 ALTER TABLE IF EXISTS ONLY public.asiento DROP CONSTRAINT IF EXISTS asiento_sucursal_id_fkey;
+ALTER TABLE IF EXISTS ONLY public.asiento DROP CONSTRAINT IF EXISTS asiento_reverso_de_id_fkey;
 ALTER TABLE IF EXISTS ONLY public.asiento DROP CONSTRAINT IF EXISTS asiento_periodo_id_fkey;
+ALTER TABLE IF EXISTS ONLY public.asiento DROP CONSTRAINT IF EXISTS asiento_creado_por_fkey;
+ALTER TABLE IF EXISTS ONLY public.asiento DROP CONSTRAINT IF EXISTS asiento_aprobado_por_fkey;
+ALTER TABLE IF EXISTS ONLY public.asiento DROP CONSTRAINT IF EXISTS asiento_anulado_por_fkey;
 DROP INDEX IF EXISTS public.ix_usuario_username;
 DROP INDEX IF EXISTS public.ix_usuario_email;
 DROP INDEX IF EXISTS public.ix_rol_codigo;
@@ -68,6 +79,11 @@ DROP INDEX IF EXISTS public.idx_cuenta_nivel;
 DROP INDEX IF EXISTS public.idx_compra_proveedor;
 DROP INDEX IF EXISTS public.idx_compra_fecha;
 DROP INDEX IF EXISTS public.idx_compra_detalle_compra;
+DROP INDEX IF EXISTS public.idx_auditoria_usuario;
+DROP INDEX IF EXISTS public.idx_auditoria_registro;
+DROP INDEX IF EXISTS public.idx_auditoria_modulo_accion;
+DROP INDEX IF EXISTS public.idx_auditoria_fecha;
+DROP INDEX IF EXISTS public.idx_asiento_reverso_unico;
 DROP INDEX IF EXISTS public.idx_asiento_periodo;
 DROP INDEX IF EXISTS public.idx_asiento_fecha;
 ALTER TABLE IF EXISTS ONLY public.usuario_rol DROP CONSTRAINT IF EXISTS usuario_rol_pkey;
@@ -99,6 +115,7 @@ ALTER TABLE IF EXISTS ONLY public.compra_detalle DROP CONSTRAINT IF EXISTS compr
 ALTER TABLE IF EXISTS ONLY public.cliente DROP CONSTRAINT IF EXISTS cliente_pkey;
 ALTER TABLE IF EXISTS ONLY public.cliente DROP CONSTRAINT IF EXISTS cliente_codigo_key;
 ALTER TABLE IF EXISTS ONLY public.catalogo_cuenta DROP CONSTRAINT IF EXISTS catalogo_cuenta_pkey;
+ALTER TABLE IF EXISTS ONLY public.auditoria DROP CONSTRAINT IF EXISTS auditoria_pkey;
 ALTER TABLE IF EXISTS ONLY public.asiento DROP CONSTRAINT IF EXISTS asiento_pkey;
 ALTER TABLE IF EXISTS ONLY public.asiento DROP CONSTRAINT IF EXISTS asiento_codigo_key;
 ALTER TABLE IF EXISTS public.usuario ALTER COLUMN id DROP DEFAULT;
@@ -117,6 +134,7 @@ ALTER TABLE IF EXISTS public.detalle_asiento ALTER COLUMN id DROP DEFAULT;
 ALTER TABLE IF EXISTS public.compra_detalle ALTER COLUMN id DROP DEFAULT;
 ALTER TABLE IF EXISTS public.compra ALTER COLUMN id DROP DEFAULT;
 ALTER TABLE IF EXISTS public.cliente ALTER COLUMN id DROP DEFAULT;
+ALTER TABLE IF EXISTS public.auditoria ALTER COLUMN id DROP DEFAULT;
 ALTER TABLE IF EXISTS public.asiento ALTER COLUMN id DROP DEFAULT;
 DROP VIEW IF EXISTS public.v_subcuenta;
 DROP VIEW IF EXISTS public.v_planilla_totales;
@@ -166,6 +184,8 @@ DROP TABLE IF EXISTS public.compra;
 DROP SEQUENCE IF EXISTS public.cliente_id_seq;
 DROP TABLE IF EXISTS public.cliente;
 DROP TABLE IF EXISTS public.catalogo_cuenta;
+DROP SEQUENCE IF EXISTS public.auditoria_id_seq;
+DROP TABLE IF EXISTS public.auditoria;
 DROP SEQUENCE IF EXISTS public.asiento_id_seq;
 DROP TABLE IF EXISTS public.asiento;
 -- *not* dropping schema, since initdb creates it
@@ -203,7 +223,14 @@ CREATE TABLE public.asiento (
     sucursal_id integer,
     estado character varying(20) DEFAULT 'VIGENTE'::character varying NOT NULL,
     creado_en timestamp without time zone DEFAULT now(),
-    CONSTRAINT asiento_estado_check CHECK (((estado)::text = ANY ((ARRAY['VIGENTE'::character varying, 'ANULADO'::character varying])::text[]))),
+    creado_por integer,
+    aprobado_por integer,
+    aprobado_en timestamp without time zone,
+    anulado_por integer,
+    anulado_en timestamp without time zone,
+    motivo_anulacion text,
+    reverso_de_id integer,
+    CONSTRAINT asiento_estado_check CHECK (((estado)::text = ANY ((ARRAY['PENDIENTE'::character varying, 'VIGENTE'::character varying, 'ANULADO'::character varying])::text[]))),
     CONSTRAINT asiento_tipo_check CHECK (((tipo)::text = ANY ((ARRAY['APERTURA'::character varying, 'DIARIO'::character varying, 'AJUSTE'::character varying, 'CIERRE'::character varying])::text[])))
 );
 
@@ -230,6 +257,51 @@ ALTER SEQUENCE public.asiento_id_seq OWNER TO postgres;
 --
 
 ALTER SEQUENCE public.asiento_id_seq OWNED BY public.asiento.id;
+
+
+--
+-- Name: auditoria; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.auditoria (
+    id integer NOT NULL,
+    fecha timestamp without time zone DEFAULT now() NOT NULL,
+    usuario_id integer,
+    usuario_nombre character varying(150) NOT NULL,
+    modulo character varying(30) NOT NULL,
+    entidad character varying(30) NOT NULL,
+    registro_id integer,
+    registro_codigo character varying(40),
+    accion character varying(20) NOT NULL,
+    descripcion text,
+    datos_antes text,
+    datos_despues text,
+    ip character varying(45)
+);
+
+
+ALTER TABLE public.auditoria OWNER TO postgres;
+
+--
+-- Name: auditoria_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE public.auditoria_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER SEQUENCE public.auditoria_id_seq OWNER TO postgres;
+
+--
+-- Name: auditoria_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+--
+
+ALTER SEQUENCE public.auditoria_id_seq OWNED BY public.auditoria.id;
 
 
 --
@@ -308,7 +380,11 @@ CREATE TABLE public.compra (
     asiento_id integer,
     dte_json text,
     creado_en timestamp without time zone DEFAULT now(),
-    CONSTRAINT compra_estado_check CHECK (((estado)::text = ANY ((ARRAY['VIGENTE'::character varying, 'ANULADA'::character varying])::text[]))),
+    creado_por integer,
+    aprobado_por integer,
+    aprobado_en timestamp without time zone,
+    motivo_anulacion text,
+    CONSTRAINT compra_estado_check CHECK (((estado)::text = ANY ((ARRAY['BORRADOR'::character varying, 'PENDIENTE'::character varying, 'VIGENTE'::character varying, 'ANULADA'::character varying])::text[]))),
     CONSTRAINT compra_tipo_doc_check CHECK (((tipo_doc)::text = ANY ((ARRAY['CCF'::character varying, 'FCON'::character varying, 'NCR'::character varying, 'TICKET'::character varying])::text[])))
 );
 
@@ -515,7 +591,11 @@ CREATE TABLE public.factura (
     asiento_id integer,
     dte_json text,
     creado_en timestamp without time zone DEFAULT now(),
-    CONSTRAINT factura_estado_check CHECK (((estado)::text = ANY ((ARRAY['VIGENTE'::character varying, 'ANULADA'::character varying])::text[]))),
+    creado_por integer,
+    aprobado_por integer,
+    aprobado_en timestamp without time zone,
+    motivo_anulacion text,
+    CONSTRAINT factura_estado_check CHECK (((estado)::text = ANY ((ARRAY['BORRADOR'::character varying, 'PENDIENTE'::character varying, 'VIGENTE'::character varying, 'ANULADA'::character varying])::text[]))),
     CONSTRAINT factura_tipo_dte_check CHECK (((tipo_dte)::text = ANY ((ARRAY['CCF'::character varying, 'FCON'::character varying, 'NCR'::character varying])::text[])))
 );
 
@@ -674,6 +754,9 @@ CREATE TABLE public.planilla (
     asiento_id integer,
     periodo_id integer NOT NULL,
     creado_en timestamp without time zone DEFAULT now(),
+    creado_por integer,
+    aprobado_por integer,
+    aprobado_en timestamp without time zone,
     CONSTRAINT planilla_estado_check CHECK (((estado)::text = ANY ((ARRAY['BORRADOR'::character varying, 'APROBADA'::character varying, 'CONTABILIZADA'::character varying, 'PAGADA'::character varying])::text[]))),
     CONSTRAINT planilla_tipo_check CHECK (((tipo)::text = ANY ((ARRAY['MENSUAL'::character varying, 'QUINCENAL'::character varying, 'AGUINALDO'::character varying])::text[])))
 );
@@ -1173,6 +1256,13 @@ ALTER TABLE ONLY public.asiento ALTER COLUMN id SET DEFAULT nextval('public.asie
 
 
 --
+-- Name: auditoria id; Type: DEFAULT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.auditoria ALTER COLUMN id SET DEFAULT nextval('public.auditoria_id_seq'::regclass);
+
+
+--
 -- Name: cliente id; Type: DEFAULT; Schema: public; Owner: postgres
 --
 
@@ -1288,10 +1378,18 @@ ALTER TABLE ONLY public.usuario ALTER COLUMN id SET DEFAULT nextval('public.usua
 -- Data for Name: asiento; Type: TABLE DATA; Schema: public; Owner: postgres
 --
 
-COPY public.asiento (id, codigo, fecha, concepto, tipo, periodo_id, sucursal_id, estado, creado_en) FROM stdin;
-1	AST-2026-0001	2026-01-01	Asiento de Apertura - Balance Inicial	APERTURA	1	1	VIGENTE	2026-08-30 21:41:57.185242
-2	AST-2026-0002	2026-03-10	Venta Factura F-001-00001 a Ferretería El Perno	DIARIO	1	1	VIGENTE	2026-08-30 21:41:57.188257
-3	AST-2026-0003	2026-03-31	Planilla Marzo 2026 - Sueldos y deducciones	DIARIO	1	1	VIGENTE	2026-08-30 21:41:57.19021
+COPY public.asiento (id, codigo, fecha, concepto, tipo, periodo_id, sucursal_id, estado, creado_en, creado_por, aprobado_por, aprobado_en, anulado_por, anulado_en, motivo_anulacion, reverso_de_id) FROM stdin;
+1	AST-2026-0001	2026-01-01	Asiento de Apertura - Balance Inicial	APERTURA	1	1	VIGENTE	2026-08-30 21:41:57.185242	\N	\N	\N	\N	\N	\N	\N
+2	AST-2026-0002	2026-03-10	Venta Factura F-001-00001 a Ferretería El Perno	DIARIO	1	1	VIGENTE	2026-08-30 21:41:57.188257	\N	\N	\N	\N	\N	\N	\N
+3	AST-2026-0003	2026-03-31	Planilla Marzo 2026 - Sueldos y deducciones	DIARIO	1	1	VIGENTE	2026-08-30 21:41:57.19021	\N	\N	\N	\N	\N	\N	\N
+\.
+
+
+--
+-- Data for Name: auditoria; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY public.auditoria (id, fecha, usuario_id, usuario_nombre, modulo, entidad, registro_id, registro_codigo, accion, descripcion, datos_antes, datos_despues, ip) FROM stdin;
 \.
 
 
@@ -1534,7 +1632,7 @@ COPY public.cliente (id, codigo, nombre, nit, nrc, direccion, telefono, email, c
 -- Data for Name: compra; Type: TABLE DATA; Schema: public; Owner: postgres
 --
 
-COPY public.compra (id, numero, tipo_doc, fecha, proveedor_id, sucursal_id, periodo_id, estado, asiento_id, dte_json, creado_en) FROM stdin;
+COPY public.compra (id, numero, tipo_doc, fecha, proveedor_id, sucursal_id, periodo_id, estado, asiento_id, dte_json, creado_en, creado_por, aprobado_por, aprobado_en, motivo_anulacion) FROM stdin;
 \.
 
 
@@ -1592,8 +1690,8 @@ COPY public.empresa (id, razon_social, nombre_comercial, nit, nrc, giro) FROM st
 -- Data for Name: factura; Type: TABLE DATA; Schema: public; Owner: postgres
 --
 
-COPY public.factura (id, numero, tipo_dte, fecha, cliente_id, sucursal_id, periodo_id, estado, asiento_id, dte_json, creado_en) FROM stdin;
-1	F-001-00001	CCF	2026-03-10	1	1	1	VIGENTE	2	{"dte":"ejemplo"}	2026-08-30 21:41:57.179001
+COPY public.factura (id, numero, tipo_dte, fecha, cliente_id, sucursal_id, periodo_id, estado, asiento_id, dte_json, creado_en, creado_por, aprobado_por, aprobado_en, motivo_anulacion) FROM stdin;
+1	F-001-00001	CCF	2026-03-10	1	1	1	VIGENTE	2	{"dte":"ejemplo"}	2026-08-30 21:41:57.179001	\N	\N	\N	\N
 \.
 
 
@@ -1666,8 +1764,8 @@ COPY public.permiso (id, codigo, nombre, modulo, accion, descripcion) FROM stdin
 -- Data for Name: planilla; Type: TABLE DATA; Schema: public; Owner: postgres
 --
 
-COPY public.planilla (id, codigo, periodo, fecha_pago, sucursal_id, tipo, estado, asiento_id, periodo_id, creado_en) FROM stdin;
-1	PLA-2026-03	2026-03	2026-03-31	1	MENSUAL	CONTABILIZADA	3	1	2026-08-30 21:41:57.182341
+COPY public.planilla (id, codigo, periodo, fecha_pago, sucursal_id, tipo, estado, asiento_id, periodo_id, creado_en, creado_por, aprobado_por, aprobado_en) FROM stdin;
+1	PLA-2026-03	2026-03	2026-03-31	1	MENSUAL	CONTABILIZADA	3	1	2026-08-30 21:41:57.182341	\N	\N	\N
 \.
 
 
@@ -1825,7 +1923,13 @@ COPY public.sucursal (id, codigo, nombre, direccion, es_matriz, razon_social, ni
 --
 
 COPY public.usuario (id, username, email, password_hash, nombre_completo, activo, fecha_creacion, ultimo_acceso, sucursal_id) FROM stdin;
-2	admin	admin@optimatech.com	$pbkdf2-sha256$29000$NyZESEkphdAaY0zJmRNCaA$fmuEcxdDMTSuk1Djz8h08Sd8JwN4Ybv9Rlwha3MT2.Y	Administrador	t	2026-10-20 03:22:18.55509	2026-10-21 18:30:16.98631	\N
+9	compras	compras@optimatech.com	$pbkdf2-sha256$29000$ck7J.d87J6Q0BoAwRkip9Q$bxIc3FPm7LNqVJieHdRQh.PnA0r3xBtDVTSX32/aKJg	Compras Demo	t	2026-10-21 20:12:30.304799	\N	\N
+10	planilla	planilla@optimatech.com	$pbkdf2-sha256$29000$pvTeW0spBSCE0FprjZFSqg$kMopLPpisvspp6FRpDRg8fMz6qPaQEVnlUR7NSDNCtg	Planilla Demo	t	2026-10-21 20:12:30.304799	\N	\N
+11	auditor	auditor@optimatech.com	$pbkdf2-sha256$29000$r9V6z7lXCmGsFQIgZEypFQ$5GKbgaUGkCz3EPcVROk.fd9K1weY32xWprbvQNQbCxo	Auditor Demo	t	2026-10-21 20:12:30.304799	\N	\N
+2	admin	admin@optimatech.com	$pbkdf2-sha256$29000$u/e.956TUmoNAaBUam3t/Q$9itiMH0ml3NiATPcyxhEP2eEyOtylyIAcz5UvIRRe7I	Administrador	t	2026-10-20 03:22:18.55509	2026-10-21 21:06:19.378357	\N
+7	auxiliar	auxiliar@optimatech.com	$pbkdf2-sha256$29000$.H.PUQqB8F7rfY.RsnZOiQ$4SHRclpLxH3AZnValWdOwn4Qc2gePmN1pBrl8bktCcU	Auxiliar Demo	t	2026-10-21 20:12:30.304799	2026-10-21 21:06:19.397401	\N
+6	contador	contador@optimatech.com	$pbkdf2-sha256$29000$u7e2FuIcwxhj7F0rBQDAuA$pxW058pcxOmK1z8WpPqj8pZS0AObP/tdHX/V8RXmeW4	Contador Demo	t	2026-10-21 20:12:30.304799	2026-10-21 21:06:19.40681	\N
+8	ventas	ventas@optimatech.com	$pbkdf2-sha256$29000$U0ppjTFGCAEAwHgvJQTgPA$9QZziPOkxaEWqxBGF0TKgA5c7xJJCtODklDbtGo7A7c	Ventas Demo	t	2026-10-21 20:12:30.304799	2026-10-21 20:52:08.642921	\N
 \.
 
 
@@ -1835,6 +1939,12 @@ COPY public.usuario (id, username, email, password_hash, nombre_completo, activo
 
 COPY public.usuario_rol (usuario_id, rol_id) FROM stdin;
 2	8
+6	9
+7	10
+8	11
+9	12
+10	13
+11	14
 \.
 
 
@@ -1842,7 +1952,14 @@ COPY public.usuario_rol (usuario_id, rol_id) FROM stdin;
 -- Name: asiento_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
 --
 
-SELECT pg_catalog.setval('public.asiento_id_seq', 4, true);
+SELECT pg_catalog.setval('public.asiento_id_seq', 8, true);
+
+
+--
+-- Name: auditoria_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
+--
+
+SELECT pg_catalog.setval('public.auditoria_id_seq', 5, true);
 
 
 --
@@ -1870,7 +1987,7 @@ SELECT pg_catalog.setval('public.compra_id_seq', 1, false);
 -- Name: detalle_asiento_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
 --
 
-SELECT pg_catalog.setval('public.detalle_asiento_id_seq', 21, true);
+SELECT pg_catalog.setval('public.detalle_asiento_id_seq', 27, true);
 
 
 --
@@ -1954,7 +2071,7 @@ SELECT pg_catalog.setval('public.sucursal_id_seq', 3, true);
 -- Name: usuario_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
 --
 
-SELECT pg_catalog.setval('public.usuario_id_seq', 5, true);
+SELECT pg_catalog.setval('public.usuario_id_seq', 11, true);
 
 
 --
@@ -1971,6 +2088,14 @@ ALTER TABLE ONLY public.asiento
 
 ALTER TABLE ONLY public.asiento
     ADD CONSTRAINT asiento_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: auditoria auditoria_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.auditoria
+    ADD CONSTRAINT auditoria_pkey PRIMARY KEY (id);
 
 
 --
@@ -2220,6 +2345,41 @@ CREATE INDEX idx_asiento_periodo ON public.asiento USING btree (periodo_id);
 
 
 --
+-- Name: idx_asiento_reverso_unico; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE UNIQUE INDEX idx_asiento_reverso_unico ON public.asiento USING btree (reverso_de_id) WHERE (reverso_de_id IS NOT NULL);
+
+
+--
+-- Name: idx_auditoria_fecha; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_auditoria_fecha ON public.auditoria USING btree (fecha);
+
+
+--
+-- Name: idx_auditoria_modulo_accion; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_auditoria_modulo_accion ON public.auditoria USING btree (modulo, accion);
+
+
+--
+-- Name: idx_auditoria_registro; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_auditoria_registro ON public.auditoria USING btree (entidad, registro_id);
+
+
+--
+-- Name: idx_auditoria_usuario; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_auditoria_usuario ON public.auditoria USING btree (usuario_id);
+
+
+--
 -- Name: idx_compra_detalle_compra; Type: INDEX; Schema: public; Owner: postgres
 --
 
@@ -2332,6 +2492,30 @@ CREATE UNIQUE INDEX ix_usuario_username ON public.usuario USING btree (username)
 
 
 --
+-- Name: asiento asiento_anulado_por_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.asiento
+    ADD CONSTRAINT asiento_anulado_por_fkey FOREIGN KEY (anulado_por) REFERENCES public.usuario(id) ON DELETE SET NULL;
+
+
+--
+-- Name: asiento asiento_aprobado_por_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.asiento
+    ADD CONSTRAINT asiento_aprobado_por_fkey FOREIGN KEY (aprobado_por) REFERENCES public.usuario(id) ON DELETE SET NULL;
+
+
+--
+-- Name: asiento asiento_creado_por_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.asiento
+    ADD CONSTRAINT asiento_creado_por_fkey FOREIGN KEY (creado_por) REFERENCES public.usuario(id) ON DELETE SET NULL;
+
+
+--
 -- Name: asiento asiento_periodo_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
 --
 
@@ -2340,11 +2524,27 @@ ALTER TABLE ONLY public.asiento
 
 
 --
+-- Name: asiento asiento_reverso_de_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.asiento
+    ADD CONSTRAINT asiento_reverso_de_id_fkey FOREIGN KEY (reverso_de_id) REFERENCES public.asiento(id) ON DELETE RESTRICT;
+
+
+--
 -- Name: asiento asiento_sucursal_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.asiento
     ADD CONSTRAINT asiento_sucursal_id_fkey FOREIGN KEY (sucursal_id) REFERENCES public.sucursal(id);
+
+
+--
+-- Name: auditoria auditoria_usuario_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.auditoria
+    ADD CONSTRAINT auditoria_usuario_id_fkey FOREIGN KEY (usuario_id) REFERENCES public.usuario(id) ON DELETE SET NULL;
 
 
 --
@@ -2372,11 +2572,27 @@ ALTER TABLE ONLY public.cliente
 
 
 --
+-- Name: compra compra_aprobado_por_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.compra
+    ADD CONSTRAINT compra_aprobado_por_fkey FOREIGN KEY (aprobado_por) REFERENCES public.usuario(id) ON DELETE SET NULL;
+
+
+--
 -- Name: compra compra_asiento_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.compra
     ADD CONSTRAINT compra_asiento_id_fkey FOREIGN KEY (asiento_id) REFERENCES public.asiento(id);
+
+
+--
+-- Name: compra compra_creado_por_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.compra
+    ADD CONSTRAINT compra_creado_por_fkey FOREIGN KEY (creado_por) REFERENCES public.usuario(id) ON DELETE SET NULL;
 
 
 --
@@ -2452,6 +2668,14 @@ ALTER TABLE ONLY public.empleado
 
 
 --
+-- Name: factura factura_aprobado_por_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.factura
+    ADD CONSTRAINT factura_aprobado_por_fkey FOREIGN KEY (aprobado_por) REFERENCES public.usuario(id) ON DELETE SET NULL;
+
+
+--
 -- Name: factura factura_asiento_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
 --
 
@@ -2465,6 +2689,14 @@ ALTER TABLE ONLY public.factura
 
 ALTER TABLE ONLY public.factura
     ADD CONSTRAINT factura_cliente_id_fkey FOREIGN KEY (cliente_id) REFERENCES public.cliente(id);
+
+
+--
+-- Name: factura factura_creado_por_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.factura
+    ADD CONSTRAINT factura_creado_por_fkey FOREIGN KEY (creado_por) REFERENCES public.usuario(id) ON DELETE SET NULL;
 
 
 --
@@ -2500,11 +2732,27 @@ ALTER TABLE ONLY public.factura
 
 
 --
+-- Name: planilla planilla_aprobado_por_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.planilla
+    ADD CONSTRAINT planilla_aprobado_por_fkey FOREIGN KEY (aprobado_por) REFERENCES public.usuario(id) ON DELETE SET NULL;
+
+
+--
 -- Name: planilla planilla_asiento_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.planilla
     ADD CONSTRAINT planilla_asiento_id_fkey FOREIGN KEY (asiento_id) REFERENCES public.asiento(id);
+
+
+--
+-- Name: planilla planilla_creado_por_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.planilla
+    ADD CONSTRAINT planilla_creado_por_fkey FOREIGN KEY (creado_por) REFERENCES public.usuario(id) ON DELETE SET NULL;
 
 
 --
@@ -2606,5 +2854,5 @@ REVOKE USAGE ON SCHEMA public FROM PUBLIC;
 -- PostgreSQL database dump complete
 --
 
-\unrestrict DfF5PhvuDI4Awcjg32gR1OmT3KPRTfMJDJNvc7vDgcZZCmgG7BGzbWDAUowFl5I
+\unrestrict MJRlvMcCLV4AVCra0WQYSHj5bM4ac4QdrcFRAAMAqTkNKIeRLcXs3vcvqKumXr7
 

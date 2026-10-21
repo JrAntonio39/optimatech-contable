@@ -4,6 +4,8 @@
       <div class="text-h5">Libro Diario</div>
       <q-badge color="primary" class="q-ml-sm">{{ total }} asiento(s)</q-badge>
       <q-space />
+      <q-btn flat icon="table_view" label="CSV" @click="exportar" />
+      <q-btn flat icon="picture_as_pdf" label="PDF" @click="imprimirPdf" />
       <q-btn
         color="primary"
         icon="add"
@@ -26,6 +28,41 @@
           dense
           emit-value
           map-options
+          clearable
+          @update:model-value="cargar"
+        />
+      </div>
+      <div class="col-12 col-md-3">
+        <q-select
+          v-model="filtroEstado"
+          :options="estados"
+          label="Estado"
+          outlined
+          dense
+          emit-value
+          map-options
+          clearable
+          @update:model-value="cargar"
+        />
+      </div>
+      <div class="col-12 col-md-3">
+        <q-input
+          v-model="filtroDesde"
+          type="date"
+          label="Desde"
+          outlined
+          dense
+          clearable
+          @update:model-value="cargar"
+        />
+      </div>
+      <div class="col-12 col-md-3">
+        <q-input
+          v-model="filtroHasta"
+          type="date"
+          label="Hasta"
+          outlined
+          dense
           clearable
           @update:model-value="cargar"
         />
@@ -151,6 +188,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { asientosService } from '@/services/asientosService.js'
+import { descargarCsv, imprimirPdf } from '@/utils/exportacion.js'
 
 const router = useRouter()
 const asientos = ref([])
@@ -161,6 +199,9 @@ const error = ref('')
 const filtroTipo = ref(null)
 const filtroPeriodo = ref(null)
 const filtroSucursal = ref(null)
+const filtroEstado = ref(null)
+const filtroDesde = ref('')
+const filtroHasta = ref('')
 const periodos = ref([])
 const sucursales = ref([])
 
@@ -170,6 +211,11 @@ const tipos = [
   { label: 'Normal', value: 'DIARIO' },
   { label: 'Ajuste', value: 'AJUSTE' },
   { label: 'Cierre', value: 'CIERRE' }
+]
+const estados = [
+  { label: 'Pendiente', value: 'PENDIENTE' },
+  { label: 'Vigente', value: 'VIGENTE' },
+  { label: 'Anulado', value: 'ANULADO' }
 ]
 
 const columnas = [
@@ -239,6 +285,9 @@ async function cargar() {
     if (filtroTipo.value) params.tipo = filtroTipo.value
     if (filtroPeriodo.value) params.periodo_id = filtroPeriodo.value
     if (filtroSucursal.value) params.sucursal_id = filtroSucursal.value
+    if (filtroEstado.value) params.estado = filtroEstado.value
+    if (filtroDesde.value) params.desde = filtroDesde.value
+    if (filtroHasta.value) params.hasta = filtroHasta.value
     const res = await asientosService.listar(params)
     asientos.value = res.asientos
     total.value = res.total
@@ -247,6 +296,14 @@ async function cargar() {
   } finally {
     cargando.value = false
   }
+}
+
+function exportar() {
+  descargarCsv(
+    'libro-diario',
+    columnas.filter(c => c.name !== 'expand'),
+    asientos.value
+  )
 }
 
 onMounted(async () => {

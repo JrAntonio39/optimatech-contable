@@ -6,6 +6,9 @@
       <q-badge :color="cuadrada ? 'positive' : 'negative'" class="q-ml-sm">
         {{ cuadrada ? 'CUADRADA' : 'DESCUADRADA' }}
       </q-badge>
+      <q-space />
+      <q-btn flat icon="table_view" label="CSV" @click="exportar" />
+      <q-btn flat icon="picture_as_pdf" label="PDF" @click="imprimirPdf" />
     </div>
 
     <q-banner v-if="error" class="bg-red-1 text-red q-mb-md" rounded>
@@ -65,6 +68,7 @@
 import { ref, onMounted } from 'vue'
 import { reportesService } from '@/services/reportesService.js'
 import { asientosService } from '@/services/asientosService.js'
+import { descargarCsv, imprimirPdf } from '@/utils/exportacion.js'
 
 const lineas = ref([])
 const totales = ref({
@@ -118,6 +122,10 @@ const columnas = [
     format: v => Number(v).toFixed(2)
   }
 ]
+
+function exportar() {
+  descargarCsv('balanza-comprobacion', columnas, lineas.value)
+}
 
 function fmt(v) {
   return Number(v || 0).toFixed(2)

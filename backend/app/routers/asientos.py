@@ -1,12 +1,14 @@
 from fastapi import APIRouter, Depends, Query, HTTPException
 from pydantic import BaseModel, Field
 from typing import Optional
-from datetime import date
+from datetime import date, datetime
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 from app.database import get_db
 from app.models.auth import Usuario
 from app.routers.auth import require_permission
+from app.services.auditoria import registrar
+from app.audit import registrar_evento
 
 router = APIRouter(prefix="/api/asientos", tags=["Asientos"])
 
@@ -30,6 +32,12 @@ class AsientoCreate(BaseModel):
     detalles: list[LineaIn]
 
 
+class AnulacionIn(BaseModel):
+    motivo: str = Field(..., min_length=5, max_length=500)
+    fecha_reversion: date
+    periodo_id: int
+
+
 def _totales(detalles):
     debe = round(sum(float(d.debe or 0) for d in detalles), 2)
     haber = round(sum(float(d.haber or 0) for d in detalles), 2)
@@ -43,6 +51,9 @@ def listar_asientos(
     tipo: str = Query(None, description="APERTURA | DIARIO | AJUSTE | CIERRE"),
     periodo_id: int = Query(None),
     sucursal_id: int = Query(None),
+    estado: str = Query(None, description="PENDIENTE | VIGENTE | ANULADO"),
+    desde: date = Query(None),
+    hasta: date = Query(None),
 ):
     query = """
         SELECT a.id, a.codigo, a.fecha, a.concepto, a.tipo, a.periodo_id, a.sucursal_id, a.estado,
@@ -50,6 +61,11 @@ def listar_asientos(
         FROM asiento a LEFT JOIN detalle_asiento d ON d.asiento_id = a.id
     """
     conds, params = [], {}
+    if estado:
+        if estado not in ("PENDIENTE", "VIGENTE", "ANULADO"):
+            raise HTTPException(400, "Estado inválido")
+        conds.append("a.estado = :estado")
+        params["estado"] = estado
     if tipo:
         if tipo not in TIPOS:
             raise HTTPException(400, f"Tipo inválido. Use: {', '.join(TIPOS)}")
@@ -61,6 +77,14 @@ def listar_asientos(
     if sucursal_id:
         conds.append("a.sucursal_id = :s")
         params["s"] = sucursal_id
+    if desde and hasta and desde > hasta:
+        raise HTTPException(400, "La fecha inicial no puede ser posterior a la fecha final")
+    if desde:
+        conds.append("a.fecha >= :desde")
+        params["desde"] = desde
+    if hasta:
+        conds.append("a.fecha <= :hasta")
+        params["hasta"] = hasta
     if conds:
         query += " WHERE " + " AND ".join(conds)
     query += " GROUP BY a.id ORDER BY a.fecha, a.id"
@@ -82,6 +106,41 @@ def totales_asientos(
 ):
     rows = db.execute(text("SELECT * FROM v_asiento_totales ORDER BY codigo")).mappings().all()
     return {"total": len(rows), "totales": [dict(r) for r in rows]}
+
+
+@router.get("/pendientes", summary="Asientos en estado PENDIENTE (por aprobar)")
+def listar_pendientes(
+    db: Session = Depends(get_db),
+    user: Usuario = Depends(require_permission("asientos", "ver")),
+    periodo_id: Optional[int] = Query(None),
+):
+    cond = ""
+    params = {}
+    if periodo_id:
+        cond = "AND a.periodo_id = :p"
+        params["p"] = periodo_id
+    rows = db.execute(
+        text(f"""
+        SELECT a.id, a.codigo, a.fecha, a.concepto, a.tipo, a.estado,
+               a.periodo_id, a.sucursal_id, a.creado_en,
+               COALESCE(SUM(d.debe),0) AS total_debe,
+               COALESCE(SUM(d.haber),0) AS total_haber
+          FROM asiento a
+          LEFT JOIN detalle_asiento d ON d.asiento_id = a.id
+         WHERE a.estado = 'PENDIENTE' {cond}
+         GROUP BY a.id
+         ORDER BY a.fecha, a.id
+        """),
+        params,
+    ).mappings().all()
+    out = []
+    for r in rows:
+        r = dict(r)
+        r["total_debe"] = float(r["total_debe"])
+        r["total_haber"] = float(r["total_haber"])
+        r["estado_partida"] = "CUADRADO" if r["total_debe"] == r["total_haber"] else "DESCUADRADO"
+        out.append(r)
+    return {"total": len(out), "asientos": out}
 
 
 @router.get("/{asiento_id}", summary="Detalle de un asiento con sus líneas")
@@ -128,7 +187,7 @@ def crear_asiento(
             raise HTTPException(400, f"Sucursal {data.sucursal_id} no existe")
 
     if data.tipo == "APERTURA":
-        ya = db.execute(text("SELECT 1 FROM asiento WHERE tipo='APERTURA' AND periodo_id=:p AND estado='VIGENTE'"), {"p": data.periodo_id}).first()
+        ya = db.execute(text("SELECT 1 FROM asiento WHERE tipo='APERTURA' AND periodo_id=:p AND estado IN ('PENDIENTE','VIGENTE')"), {"p": data.periodo_id}).first()
         if ya:
             raise HTTPException(409, "Ya existe un asiento de APERTURA vigente en este periodo")
 
@@ -162,8 +221,8 @@ def crear_asiento(
 
     try:
         res = db.execute(
-            text("INSERT INTO asiento (codigo, fecha, concepto, tipo, periodo_id, sucursal_id) VALUES (:c,:f,:co,:t,:p,:s) RETURNING id"),
-            {"c": codigo, "f": data.fecha, "co": data.concepto.strip(), "t": data.tipo, "p": data.periodo_id, "s": data.sucursal_id},
+            text("INSERT INTO asiento (codigo, fecha, concepto, tipo, periodo_id, sucursal_id, estado, creado_por) VALUES (:c,:f,:co,:t,:p,:s,'PENDIENTE',:u) RETURNING id"),
+            {"c": codigo, "f": data.fecha, "co": data.concepto.strip(), "t": data.tipo, "p": data.periodo_id, "s": data.sucursal_id, "u": user.id},
         )
         nuevo_id = res.mappings().first()["id"]
         for lin in data.detalles:
@@ -171,6 +230,14 @@ def crear_asiento(
                 text("INSERT INTO detalle_asiento (asiento_id, cuenta_codigo, debe, haber, descripcion) VALUES (:a,:c,:d,:h,:desc)"),
                 {"a": nuevo_id, "c": lin.cuenta_codigo, "d": float(lin.debe or 0), "h": float(lin.haber or 0), "desc": lin.descripcion},
             )
+        registrar_evento(
+            db,
+            actor_id=user.id,
+            accion="CREAR",
+            entidad="asiento",
+            entidad_id=nuevo_id,
+            despues={"codigo": codigo, "estado": "PENDIENTE", "debe": debe, "haber": haber},
+        )
         db.commit()
     except HTTPException:
         raise
@@ -178,4 +245,103 @@ def crear_asiento(
         db.rollback()
         raise HTTPException(500, f"No se pudo guardar el asiento: {e}")
 
-    return detalle_asiento(nuevo_id, db)
+    respuesta = detalle_asiento(nuevo_id, db)
+    respuesta["estado"] = "PENDIENTE"
+    respuesta["msg"] = (
+        f"Asiento {codigo} registrado como PENDIENTE. "
+        "Requiere aprobación de un contador para contabilizarse."
+    )
+    return respuesta
+
+
+@router.post("/{asiento_id}/aprobar", summary="Aprobar un asiento pendiente")
+def aprobar_asiento(
+    asiento_id: int,
+    db: Session = Depends(get_db),
+    user: Usuario = Depends(require_permission("asientos", "aprobar")),
+):
+    row = db.execute(text("SELECT id, codigo, estado FROM asiento WHERE id=:id FOR UPDATE"), {"id": asiento_id}).mappings().first()
+    if not row:
+        raise HTTPException(404, "Asiento no encontrado")
+    if row["estado"] != "PENDIENTE":
+        raise HTTPException(409, "Solo se pueden aprobar asientos pendientes")
+    tot = db.execute(
+        text("SELECT COALESCE(SUM(debe),0) debe, COALESCE(SUM(haber),0) haber FROM detalle_asiento WHERE asiento_id=:id"),
+        {"id": asiento_id},
+    ).mappings().first()
+    if round(float(tot["debe"]), 2) != round(float(tot["haber"]), 2) or float(tot["debe"]) <= 0:
+        raise HTTPException(409, "El asiento no cuadra y no se puede aprobar")
+    db.execute(
+        text("UPDATE asiento SET estado='VIGENTE', aprobado_por=:u, aprobado_en=:now WHERE id=:id"),
+        {"u": user.id, "now": datetime.utcnow(), "id": asiento_id},
+    )
+    registrar_evento(db, actor_id=user.id, accion="APROBAR", entidad="asiento", entidad_id=asiento_id, antes={"estado": "PENDIENTE"}, despues={"estado": "VIGENTE", "codigo": row["codigo"]})
+    db.commit()
+    return detalle_asiento(asiento_id, db)
+
+
+@router.post("/{asiento_id}/anular", summary="Anular asiento con contrapartida y motivo")
+def anular_asiento(
+    asiento_id: int,
+    data: AnulacionIn,
+    db: Session = Depends(get_db),
+    user: Usuario = Depends(require_permission("asientos", "anular")),
+):
+    original = db.execute(
+        text("SELECT * FROM asiento WHERE id=:id FOR UPDATE"), {"id": asiento_id}
+    ).mappings().first()
+    if not original:
+        raise HTTPException(404, "Asiento no encontrado")
+    if original["estado"] != "VIGENTE":
+        raise HTTPException(409, "Solo se pueden anular asientos vigentes")
+    periodo = db.execute(
+        text("SELECT id, anio, fecha_inicio, fecha_fin FROM periodo_contable WHERE id=:id AND estado='ABIERTO'"),
+        {"id": data.periodo_id},
+    ).mappings().first()
+    if not periodo or not (periodo["fecha_inicio"] <= data.fecha_reversion <= periodo["fecha_fin"]):
+        raise HTTPException(400, "La fecha de reversión debe estar dentro de un período abierto")
+
+    lineas = db.execute(
+        text("SELECT cuenta_codigo, debe, haber, descripcion FROM detalle_asiento WHERE asiento_id=:id ORDER BY id"),
+        {"id": asiento_id},
+    ).mappings().all()
+    next_id = db.execute(text("SELECT nextval(pg_get_serial_sequence('asiento','id')) AS id")).mappings().first()["id"]
+    codigo = f"REV-{periodo['anio']}-{int(next_id):04d}"
+    try:
+        nuevo = db.execute(
+            text("""
+                INSERT INTO asiento
+                    (codigo, fecha, concepto, tipo, periodo_id, sucursal_id, estado,
+                     creado_por, aprobado_por, aprobado_en, reverso_de_id)
+                VALUES (:codigo, :fecha, :concepto, 'AJUSTE', :periodo, :sucursal, 'VIGENTE',
+                        :usuario, :usuario, :ahora, :original)
+                RETURNING id
+            """),
+            {"codigo": codigo, "fecha": data.fecha_reversion,
+             "concepto": f"Reversión de {original['codigo']}: {data.motivo.strip()}",
+             "periodo": data.periodo_id, "sucursal": original["sucursal_id"],
+             "usuario": user.id, "ahora": datetime.utcnow(), "original": asiento_id},
+        ).mappings().first()
+        reversal_id = nuevo["id"]
+        for lin in lineas:
+            db.execute(
+                text("INSERT INTO detalle_asiento (asiento_id, cuenta_codigo, debe, haber, descripcion) VALUES (:a,:c,:d,:h,:desc)"),
+                {"a": reversal_id, "c": lin["cuenta_codigo"], "d": lin["haber"], "h": lin["debe"], "desc": f"Reversión: {lin['descripcion'] or original['concepto']}"},
+            )
+        db.execute(
+            text("UPDATE asiento SET estado='ANULADO', anulado_por=:u, anulado_en=:now, motivo_anulacion=:motivo WHERE id=:id"),
+            {"u": user.id, "now": datetime.utcnow(), "motivo": data.motivo.strip(), "id": asiento_id},
+        )
+        registrar_evento(db, actor_id=user.id, accion="ANULAR", entidad="asiento", entidad_id=asiento_id,
+                         motivo=data.motivo.strip(), antes={"estado": "VIGENTE", "codigo": original["codigo"]},
+                         despues={"estado": "ANULADO", "reverso_id": reversal_id, "reverso_codigo": codigo})
+        registrar_evento(db, actor_id=user.id, accion="REVERSAR", entidad="asiento", entidad_id=reversal_id,
+                         motivo=data.motivo.strip(), despues={"estado": "VIGENTE", "reverso_de_id": asiento_id, "codigo": codigo})
+        db.commit()
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(500, f"No se pudo anular el asiento: {exc}")
+    return {"anulado": detalle_asiento(asiento_id, db), "reversion": detalle_asiento(reversal_id, db)}

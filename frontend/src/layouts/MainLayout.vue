@@ -27,11 +27,17 @@
           flat
           dense
           round
-          color="primary"
-          label="Modo oscuro"
-          icon="dark_mode"
+          class="opti-theme-toggle"
+          :icon="$q.dark.isActive ? 'light_mode' : 'dark_mode'"
+          :aria-label="
+            $q.dark.isActive ? 'Activar modo claro' : 'Activar modo oscuro'
+          "
           @click="toggleDark"
-        />
+        >
+          <q-tooltip>{{
+            $q.dark.isActive ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'
+          }}</q-tooltip>
+        </q-btn>
 
         <q-btn
           v-if="auth.estaAutenticado"
@@ -140,7 +146,9 @@ function toggleLeftDrawer() {
 }
 
 function toggleDark() {
-  $q.dark.set(!$q.dark.isActive)
+  const nuevoModo = !$q.dark.isActive
+  $q.dark.set(nuevoModo)
+  localStorage.setItem('opti-theme', nuevoModo ? 'dark' : 'light')
 }
 
 async function logout() {

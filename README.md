@@ -27,6 +27,8 @@ docker compose up -d
 # 2b. Cargar esquema + datos (217 cuentas del catálogo y tablas del sistema)
 # Solo la primera vez (o para resetear la BD):
 docker exec -i optimatech_db psql -U postgres -d optimatech_db < db/optimatech_init.sql
+# Aplicar controles operativos (auditoría, estados de aprobación y reversos):
+docker exec -i optimatech_db psql -v ON_ERROR_STOP=1 -U postgres -d optimatech_db < db/002_operational_controls.sql
 
 # 3. Backend
 cd backend
@@ -88,16 +90,48 @@ python3 -m scripts.crear_admin --username admin --nombre "Administrador"
 python3 -m scripts.crear_admin --username admin --reset
 ```
 
+### Usuarios de demostración (uno por rol)
+
+```bash
+cd backend
+python3 -m scripts.seed_usuarios_demo
+```
+
+Crea `contador`, `auxiliar`, `ventas`, `compras`, `planilla` y `auditor`, todos
+con contraseña `Demo1234`. Sirve para probar la matriz de permisos.
+
 ### Verificar que los permisos se aplican
 
 ```bash
 cd backend
-python3 -m scripts.verificar_permisos
+python3 -m scripts.verificar_permisos   # matriz de permisos por rol
+python3 -m scripts.probar_control       # flujo de aprobación, anulación y bitácora
 ```
 
-Crea usuarios temporales de prueba (ventas, contador, auditor), hace login con
-cada uno y comprueba que la API acepta lo permitido y responde **403** en lo
-no permitido.
+## Control del sistema (aprobaciones, períodos e historial)
+
+- **Ciclo de vida del asiento:** todo asiento se registra en estado
+  `PENDIENTE` y no suma a los reportes hasta que alguien con
+  `asientos.aprobar` lo aprueba (pasa a `VIGENTE`).
+- **Anulación con reversión:** anular un asiento vigente no lo borra: genera un
+  **asiento de reversión** (contra-asiento) por el mismo monto dentro de un
+  período abierto, marca el original como `ANULADO` y guarda el motivo.
+- **Períodos contables:** se pueden abrir, editar, **cerrar** (bloquea
+  movimientos) y reabrir. No se cierra un período con asientos `PENDIENTE`.
+- **Sucursales:** alta y edición.
+- **Bitácora de auditoría:** tabla `auditoria` con quién hizo cada operación
+  (crear, editar, aprobar, anular, cerrar), cuándo y qué cambió.
+
+| Método | Ruta | Descripción |
+| :--- | :--- | :--- |
+| GET | `/api/asientos/pendientes` | Asientos por aprobar (`asientos.ver`) |
+| POST | `/api/asientos/{id}/aprobar` | Aprueba un asiento (`asientos.aprobar`) |
+| POST | `/api/asientos/{id}/anular` | Anula con reversión (`asientos.anular`) |
+| GET/POST/PUT | `/api/periodos` | Períodos contables |
+| POST | `/api/periodos/{id}/cerrar` | Cierra el período (`periodos.cerrar`) |
+| POST | `/api/periodos/{id}/abrir` | Reabre el período (`periodos.cerrar`) |
+| GET/POST/PUT | `/api/sucursales` | Sucursales |
+| GET | `/api/auditoria` | Bitácora con filtros (`auditoria.ver`) |
 
 ### Endpoints de autenticación
 
@@ -147,12 +181,28 @@ APP_Optimal_TECH/
 - Pérdidas y ganancias
 - Balance general
 - Usuarios, roles, permisos e inicio de sesión
+- Aprobación y reversión auditable de asientos
+- Administración de períodos y sucursales, y consulta de auditoría
+- Filtros por estado y rango de fechas en el libro diario
+- Exportación CSV y salida PDF mediante impresión del navegador en reportes principales
 
-## Pendiente (para repartir)
+## Pendiente
 
-- Seed de clases 2 (Pasivo), 4, 5, 6 y 7 en el catálogo.
-- Páginas funcionales: Facturación, Compras y Planilla.
-- Bitácora de auditoría (quién creó, editó, aprobó o anuló cada operación).
-- Aprobación/anulación de asientos con estados (borrador, pendiente, aprobado).
-- Administración de períodos y sucursales con bloqueo de períodos cerrados.
-- Exportación de reportes a Excel/PDF.
+- Completar los flujos funcionales de Facturación, Compras y Planilla (las pantallas actuales siguen siendo informativas).
+- Integrar facturación electrónica/DTE real y sus validaciones fiscales; la app aún no transmite documentos a Hacienda.
+- Exportación Excel XLSX; el CSV se puede abrir en Excel y el PDF se obtiene con la impresión del navegador.
+- Revisión contable y tributaria de las cuentas y reglas antes de usar con operaciones reales.
+
+## Seguridad en ejecución
+
+Define `JWT_SECRET` como secreto aleatorio en el `.env` de backend antes de exponer el servicio. En `APP_ENV=production` la API no inicia si falta. La limitación de intentos de login actual vive en memoria del proceso y se reinicia al reiniciar el backend; para despliegues con varias instancias hay que moverla a un almacén compartido.
+
+### Respaldos locales
+
+```bash
+bash scripts/backup_db.sh
+# La restauración reemplaza los objetos actuales; exige confirmación escrita.
+bash scripts/restore_db.sh backups/optimatech_db_FECHA_HORA.dump
+```
+
+Los respaldos se guardan en `backups/`, carpeta excluida de Git. Conserva una copia fuera del equipo para poder recuperarte de una falla del disco.

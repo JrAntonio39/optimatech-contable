@@ -5,22 +5,20 @@ from app.database import get_db
 from app.models.auth import Usuario
 from app.routers.auth import require_permission
 
-router = APIRouter(tags=["Catálogos base"])
+router = APIRouter(prefix="/api", tags=["Datos de la empresa"])
 
 
-@router.get("/api/periodos", summary="Periodos contables para los formularios")
-def listar_periodos(
-    db: Session = Depends(get_db),
-    user: Usuario = Depends(require_permission("periodos", "ver")),
-):
-    rows = db.execute(text("SELECT id, anio, fecha_inicio, fecha_fin, estado FROM periodo_contable ORDER BY anio DESC")).mappings().all()
-    return {"total": len(rows), "periodos": [dict(r) for r in rows]}
-
-
-@router.get("/api/sucursales", summary="Sucursales para los formularios")
-def listar_sucursales(
+@router.get("/empresa", summary="Datos de la OptimaTech")
+def datos_empresa(
     db: Session = Depends(get_db),
     user: Usuario = Depends(require_permission("sucursales", "ver")),
 ):
-    rows = db.execute(text("SELECT id, codigo, nombre, es_matriz FROM sucursal ORDER BY id")).mappings().all()
-    return {"total": len(rows), "sucursales": [dict(r) for r in rows]}
+    emp = db.execute(text("SELECT * FROM empresa LIMIT 1")).mappings().first()
+    if not emp:
+        return {"empresa": None}
+    return {"empresa": dict(emp)}
+
+
+# NOTA: los listados de /api/periodos y /api/sucursales viven en routers/control.py
+# porque allí incluyen datos adicionales (nº de asientos, totales) y controles
+# de estado (cerrar/reabrir período).

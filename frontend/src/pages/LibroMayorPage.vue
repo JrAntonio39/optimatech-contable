@@ -3,6 +3,9 @@
     <div class="row items-center q-mb-md">
       <div class="text-h5">Libro Mayor</div>
       <q-badge color="primary" class="q-ml-sm">{{ total }} cuenta(s)</q-badge>
+      <q-space />
+      <q-btn flat icon="table_view" label="CSV" @click="exportar" />
+      <q-btn flat icon="picture_as_pdf" label="PDF" @click="imprimirPdf" />
     </div>
 
     <q-banner v-if="error" class="bg-red-1 text-red q-mb-md" rounded>
@@ -110,6 +113,7 @@
 import { ref, onMounted } from 'vue'
 import { reportesService } from '@/services/reportesService.js'
 import { asientosService } from '@/services/asientosService.js'
+import { descargarCsv, imprimirPdf } from '@/utils/exportacion.js'
 
 const cuentas = ref([])
 const detalle = ref(null)
@@ -187,6 +191,18 @@ const columnasMov = [
     format: v => Number(v).toFixed(2)
   }
 ]
+
+function exportar() {
+  if (detalle.value) {
+    descargarCsv(
+      `libro-mayor-${detalle.value.cuenta.codigo}`,
+      columnasMov,
+      detalle.value.movimientos
+    )
+    return
+  }
+  descargarCsv('libro-mayor', columnas, cuentas.value)
+}
 
 function filtrarCuentas(val, update) {
   update(() => {

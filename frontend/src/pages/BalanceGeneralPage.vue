@@ -10,6 +10,9 @@
           datos.cuadrado ? 'CUADRADO' : `DIFERENCIA ${fmt(datos.diferencia)}`
         }}
       </q-badge>
+      <q-space />
+      <q-btn flat icon="table_view" label="CSV" @click="exportar" />
+      <q-btn flat icon="picture_as_pdf" label="PDF" @click="imprimirPdf" />
     </div>
 
     <q-banner v-if="error" class="bg-red-1 text-red q-mb-md" rounded>
@@ -101,6 +104,7 @@ import { ref, onMounted } from 'vue'
 import { reportesService } from '@/services/reportesService.js'
 import { asientosService } from '@/services/asientosService.js'
 import SeccionBalance from '@/components/SeccionBalance.vue'
+import { descargarCsv, imprimirPdf } from '@/utils/exportacion.js'
 
 const datos = ref({
   activo: { total: 0, rubros: [] },
@@ -117,6 +121,41 @@ const periodos = ref([])
 
 function fmt(v) {
   return Number(v || 0).toFixed(2)
+}
+
+function exportar() {
+  const filas = []
+  for (const [grupo, bloque] of [
+    ['Activo', datos.value.activo],
+    ['Pasivo', datos.value.pasivo],
+    ['Patrimonio', datos.value.patrimonio]
+  ]) {
+    for (const rubro of bloque.rubros || []) {
+      filas.push({
+        grupo,
+        codigo: rubro.codigo,
+        nombre: rubro.nombre,
+        saldo: rubro.saldo
+      })
+      for (const linea of rubro.lineas || [])
+        filas.push({
+          grupo,
+          codigo: linea.codigo,
+          nombre: linea.nombre,
+          saldo: linea.saldo
+        })
+    }
+  }
+  descargarCsv(
+    'balance-general',
+    [
+      { label: 'Grupo', field: 'grupo' },
+      { label: 'Código', field: 'codigo' },
+      { label: 'Cuenta', field: 'nombre' },
+      { label: 'Saldo', field: 'saldo' }
+    ],
+    filas
+  )
 }
 
 async function cargar() {

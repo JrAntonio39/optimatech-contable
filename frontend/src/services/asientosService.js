@@ -14,6 +14,9 @@ export const asientosService = {
     if (params.tipo) qs.set('tipo', params.tipo)
     if (params.periodo_id) qs.set('periodo_id', params.periodo_id)
     if (params.sucursal_id) qs.set('sucursal_id', params.sucursal_id)
+    if (params.estado) qs.set('estado', params.estado)
+    if (params.desde) qs.set('desde', params.desde)
+    if (params.hasta) qs.set('hasta', params.hasta)
     const suffix = qs.toString() ? `?${qs.toString()}` : ''
     return api.get(`/api/asientos${suffix}`)
   },

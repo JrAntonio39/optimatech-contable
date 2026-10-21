@@ -3,8 +3,8 @@ import { ref, computed } from 'vue'
 import { loginRequest } from '@/services/api.js'
 
 export const useAuthStore = defineStore('auth', () => {
-  const token = ref(localStorage.getItem('token') || '')
-  const usuario = ref(JSON.parse(localStorage.getItem('usuario') || 'null'))
+  const token = ref(sessionStorage.getItem('token') || '')
+  const usuario = ref(JSON.parse(sessionStorage.getItem('usuario') || 'null'))
   const cargando = ref(false)
   const error = ref('')
 
@@ -31,8 +31,8 @@ export const useAuthStore = defineStore('auth', () => {
       const res = await loginRequest(username, password)
       token.value = res.access_token
       usuario.value = res.usuario
-      localStorage.setItem('token', token.value)
-      localStorage.setItem('usuario', JSON.stringify(usuario.value))
+      sessionStorage.setItem('token', token.value)
+      sessionStorage.setItem('usuario', JSON.stringify(usuario.value))
       return true
     } catch (e) {
       error.value = e.message || 'Error al iniciar sesión'
@@ -45,13 +45,13 @@ export const useAuthStore = defineStore('auth', () => {
   function logout() {
     token.value = ''
     usuario.value = null
-    localStorage.removeItem('token')
-    localStorage.removeItem('usuario')
+    sessionStorage.removeItem('token')
+    sessionStorage.removeItem('usuario')
   }
 
   function init() {
-    const storedToken = localStorage.getItem('token')
-    const storedUser = localStorage.getItem('usuario')
+    const storedToken = sessionStorage.getItem('token')
+    const storedUser = sessionStorage.getItem('usuario')
     if (storedToken && storedUser) {
       token.value = storedToken
       try {

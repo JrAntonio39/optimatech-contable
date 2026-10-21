@@ -96,5 +96,24 @@ export const MENU_SECTIONS = [
         permiso: 'planilla.ver'
       }
     ]
+  },
+  {
+    title: 'Control del sistema',
+    items: [
+      {
+        label: 'Control y auditoría',
+        caption: 'Aprobaciones, periodos e historial',
+        icon: 'manage_accounts',
+        to: '/control',
+        permiso: 'asientos.ver'
+      },
+      {
+        label: 'Usuarios y roles',
+        caption: 'Permisos y accesos',
+        icon: 'group',
+        to: '/usuarios',
+        permiso: 'usuarios.ver'
+      }
+    ]
   }
 ]

@@ -5,6 +5,9 @@
       <q-badge :color="badgeColor" class="q-ml-sm">
         {{ datos.resultado }}: {{ fmt(datos.utilidad_neta) }}
       </q-badge>
+      <q-space />
+      <q-btn flat icon="table_view" label="CSV" @click="exportar" />
+      <q-btn flat icon="picture_as_pdf" label="PDF" @click="imprimirPdf" />
     </div>
 
     <q-banner v-if="error" class="bg-red-1 text-red q-mb-md" rounded>
@@ -76,6 +79,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { reportesService } from '@/services/reportesService.js'
 import { asientosService } from '@/services/asientosService.js'
+import { descargarCsv, imprimirPdf } from '@/utils/exportacion.js'
 
 const datos = ref({
   ingresos: { total: 0, lineas: [] },
@@ -99,6 +103,21 @@ const columnas = [
     format: v => Number(v).toFixed(2)
   }
 ]
+
+function exportar() {
+  const filas = [
+    ...datos.value.ingresos.lineas.map(fila => ({ ...fila, tipo: 'Ingreso' })),
+    ...datos.value.gastos.lineas.map(fila => ({ ...fila, tipo: 'Costo/Gasto' }))
+  ]
+  descargarCsv(
+    'estado-resultados',
+    [
+      { label: 'Tipo', field: 'tipo' },
+      ...columnas.map(col => ({ label: col.label, field: col.field }))
+    ],
+    filas
+  )
+}
 
 const badgeColor = computed(() =>
   datos.value.resultado === 'UTILIDAD'

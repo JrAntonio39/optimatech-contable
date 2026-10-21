@@ -1,9 +1,11 @@
 import os
+import time
+from collections import defaultdict, deque
 from datetime import datetime, timedelta
 from typing import Optional, List
 from jose import jwt, JWTError
 from passlib.context import CryptContext
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from sqlalchemy import text
@@ -16,16 +18,35 @@ from app.schemas.auth import (
     RolCreate, RolUpdate, RolOut,
     PermisoCreate, PermisoOut,
 )
+from app.audit import registrar_evento
 
 router = APIRouter(prefix="/api/auth", tags=["Autenticación"])
 
 # Configuración JWT
-SECRET_KEY = os.getenv("JWT_SECRET", "cambia-esto-en-produccion-usando-una-clave-larga-y-aleatoria")
+SECRET_KEY = os.getenv("JWT_SECRET", "")
+if not SECRET_KEY:
+    if os.getenv("APP_ENV", "development").lower() == "production":
+        raise RuntimeError("JWT_SECRET debe configurarse en producción")
+    SECRET_KEY = "clave-local-solo-desarrollo-optimatech"
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("JWT_EXPIRE_MIN", "480"))  # 8 horas
 
 pwd_context = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
+_login_attempts: dict[str, deque[float]] = defaultdict(deque)
+_LOGIN_WINDOW_SECONDS = 15 * 60
+_LOGIN_MAX_ATTEMPTS = 5
+
+
+def _record_failed_login(request: Request, username: str) -> None:
+    now = time.monotonic()
+    key = f"{request.client.host if request.client else 'unknown'}:{username.strip().casefold()}"
+    attempts = _login_attempts[key]
+    while attempts and now - attempts[0] >= _LOGIN_WINDOW_SECONDS:
+        attempts.popleft()
+    if len(attempts) >= _LOGIN_MAX_ATTEMPTS:
+        raise HTTPException(429, "Demasiados intentos. Espera 15 minutos antes de volver a intentar.")
+    attempts.append(now)
 
 
 # Utilidades de contraseña
@@ -89,14 +110,17 @@ def require_permission(modulo: str, accion: str):
 # ===================== LOGIN / REGISTRO =====================
 
 @router.post("/login", response_model=TokenResponse, summary="Iniciar sesión")
-def login(form: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+def login(request: Request, form: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
     user = db.query(Usuario).filter(Usuario.username == form.username).first()
     if not user or not verify_password(form.password, user.password_hash):
+        _record_failed_login(request, form.username)
         raise HTTPException(status_code=401, detail="Usuario o contraseña incorrectos")
     if not user.activo:
         raise HTTPException(status_code=403, detail="Usuario inactivo")
     user.ultimo_acceso = datetime.utcnow()
     db.commit()
+    key = f"{request.client.host if request.client else 'unknown'}:{form.username.strip().casefold()}"
+    _login_attempts.pop(key, None)
     token = create_access_token({"sub": str(user.id)})
     return TokenResponse(
         access_token=token,
@@ -118,9 +142,14 @@ def register(data: UsuarioCreate, db: Session = Depends(get_db), user: Usuario =
         sucursal_id=data.sucursal_id,
     )
     if data.rol_codigos:
-        roles = db.query(Rol).filter(Rol.codigo.in_(data.rol_codigos)).all()
+        roles = db.query(Rol).filter(Rol.codigo.in_(data.rol_codigos), Rol.activo == True).all()
+        if len(roles) != len(set(data.rol_codigos)):
+            raise HTTPException(400, "Uno o más roles no existen o están inactivos")
         new_user.roles = roles
     db.add(new_user)
+    db.flush()
+    registrar_evento(db, actor_id=user.id, accion="CREAR", entidad="usuario", entidad_id=new_user.id,
+                     despues={"username": new_user.username, "roles": data.rol_codigos})
     db.commit()
     db.refresh(new_user)
     return UsuarioOut.model_validate(new_user, from_attributes=True)
@@ -140,22 +169,6 @@ def debug_permisos(user: Usuario = Depends(get_current_user)):
     }
 
 
-@router.get("/debug-token", summary="Debug: decodificar token sin validar")
-def debug_token(token: str = Depends(oauth2_scheme)):
-    try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        return {"payload": payload}
-    except Exception as e:
-        return {"error": str(e), "token_recibido": token[:20] if token else "None"}
-
-
-from fastapi import Header
-
-@router.get("/debug-header", summary="Debug: ver header Authorization")
-def debug_header(authorization: str = Header(None, alias="Authorization")):
-    return {"authorization_header": authorization[:50] if authorization else "None"}
-
-
 # ===================== USUARIOS (admin) =====================
 
 @router.get("/usuarios", response_model=List[UsuarioOut], summary="Listar usuarios")
@@ -172,6 +185,8 @@ def obtener_usuario(user_id: int, db: Session = Depends(get_db), user: Usuario =
     u = db.query(Usuario).filter(Usuario.id == user_id).first()
     if not u:
         raise HTTPException(404, "Usuario no encontrado")
+    before = {"email": u.email, "nombre_completo": u.nombre_completo, "activo": u.activo,
+              "sucursal_id": u.sucursal_id, "roles": u.rol_codigos}
     return UsuarioOut.model_validate(u, from_attributes=True)
 
 
@@ -191,7 +206,14 @@ def actualizar_usuario(user_id: int, data: UsuarioUpdate, db: Session = Depends(
     if data.sucursal_id is not None:
         u.sucursal_id = data.sucursal_id
     if data.rol_codigos is not None:
-        u.roles = db.query(Rol).filter(Rol.codigo.in_(data.rol_codigos)).all()
+        roles = db.query(Rol).filter(Rol.codigo.in_(data.rol_codigos), Rol.activo == True).all()
+        if len(roles) != len(set(data.rol_codigos)):
+            raise HTTPException(400, "Uno o más roles no existen o están inactivos")
+        u.roles = roles
+    registrar_evento(db, actor_id=user.id, accion="EDITAR", entidad="usuario", entidad_id=user_id,
+                     antes=before, despues={"email": u.email, "nombre_completo": u.nombre_completo,
+                                           "activo": u.activo, "sucursal_id": u.sucursal_id,
+                                           "roles": u.rol_codigos})
     db.commit()
     db.refresh(u)
     return UsuarioOut.model_validate(u, from_attributes=True)
@@ -202,7 +224,10 @@ def desactivar_usuario(user_id: int, db: Session = Depends(get_db), user: Usuari
     u = db.query(Usuario).filter(Usuario.id == user_id).first()
     if not u:
         raise HTTPException(404, "Usuario no encontrado")
+    before = {"username": u.username, "activo": u.activo}
     u.activo = False
+    registrar_evento(db, actor_id=user.id, accion="DESACTIVAR", entidad="usuario", entidad_id=user_id,
+                     antes=before, despues={"username": u.username, "activo": False})
     db.commit()
 
 

@@ -36,12 +36,27 @@ export default defineRouter((/* { store, ssrContext } */) => {
 
   // Guardia de navegación: proteger rutas que requieren autenticación
   Router.beforeEach(to => {
-    if (to.meta.requiresAuth && !localStorage.getItem('token')) {
+    const token = sessionStorage.getItem('token')
+    if (to.matched.some(record => record.meta.requiresAuth) && !token) {
       return { path: '/login', query: { redirect: to.fullPath } }
     }
 
-    if (to.path === '/login' && localStorage.getItem('token')) {
+    if (to.path === '/login' && token) {
       return { path: '/catalogo' }
+    }
+
+    if (to.meta.permiso && token) {
+      try {
+        const user = JSON.parse(sessionStorage.getItem('usuario') || 'null')
+        const allowed =
+          user?.rol_codigos?.includes('admin') ||
+          user?.permiso_codigos?.includes(to.meta.permiso)
+        if (!allowed) return { path: '/', query: { sinPermiso: '1' } }
+      } catch {
+        sessionStorage.removeItem('token')
+        sessionStorage.removeItem('usuario')
+        return { path: '/login' }
+      }
     }
 
     return true

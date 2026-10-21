@@ -9,7 +9,7 @@
 export const API_BASE_URL = import.meta.env.VITE_API_URL ?? ''
 
 function getAuthHeader() {
-  const token = localStorage.getItem('token')
+  const token = sessionStorage.getItem('token')
   return token ? { Authorization: `Bearer ${token}` } : {}
 }
 
@@ -51,8 +51,14 @@ export async function loginRequest(username, password) {
     body: form.toString()
   })
   if (!res.ok) {
-    const detail = await res.text().catch(() => '')
-    throw new Error(`API ${res.status}: ${detail || res.statusText}`)
+    let message = `No se pudo iniciar sesión (${res.status})`
+    try {
+      const payload = await res.json()
+      if (typeof payload.detail === 'string') message = payload.detail
+    } catch {
+      // Conserva el mensaje legible si el servidor no devuelve JSON.
+    }
+    throw new Error(message)
   }
   return res.json()
 }
