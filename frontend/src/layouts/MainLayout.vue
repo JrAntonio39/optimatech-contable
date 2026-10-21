@@ -66,26 +66,28 @@
         <q-separator spaced />
 
         <template v-for="section in menuSections" :key="section.title">
-          <q-item-label header class="opti-menu-section">
-            {{ section.title }}
-          </q-item-label>
+          <template v-if="itemsVisibles(section).length">
+            <q-item-label header class="opti-menu-section">
+              {{ section.title }}
+            </q-item-label>
 
-          <q-item
-            v-for="item in section.items"
-            :key="item.to"
-            clickable
-            :to="item.to"
-            exact
-            active-class="menu-active"
-          >
-            <q-item-section avatar>
-              <q-icon :name="item.icon" />
-            </q-item-section>
-            <q-item-section>
-              <q-item-label>{{ item.label }}</q-item-label>
-              <q-item-label caption>{{ item.caption }}</q-item-label>
-            </q-item-section>
-          </q-item>
+            <q-item
+              v-for="item in itemsVisibles(section)"
+              :key="item.to"
+              clickable
+              :to="item.to"
+              exact
+              active-class="menu-active"
+            >
+              <q-item-section avatar>
+                <q-icon :name="item.icon" />
+              </q-item-section>
+              <q-item-section>
+                <q-item-label>{{ item.label }}</q-item-label>
+                <q-item-label caption>{{ item.caption }}</q-item-label>
+              </q-item-section>
+            </q-item>
+          </template>
         </template>
 
         <q-separator spaced />
@@ -124,6 +126,14 @@ const router = useRouter()
 const apiStatusColor = computed(() =>
   apiStatus.value.includes('en línea') ? 'green-3' : 'red-3'
 )
+
+/** Ítems del menú visibles según los permisos del usuario autenticado. */
+function itemsVisibles(section) {
+  return section.items.filter(item => {
+    if (!item.permiso) return true
+    return auth.tienePermiso(item.permiso)
+  })
+}
 
 function toggleLeftDrawer() {
   leftDrawerOpen.value = !leftDrawerOpen.value

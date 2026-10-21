@@ -3,6 +3,8 @@ from sqlalchemy.orm import Session
 from sqlalchemy import text
 from typing import Optional
 from app.database import get_db
+from app.models.auth import Usuario
+from app.routers.auth import require_permission
 
 router = APIRouter(prefix="/api/reportes", tags=["Reportes"])
 
@@ -23,6 +25,7 @@ def _periodo_filtro(periodo_id: Optional[int], db: Session):
 @router.get("/mayor", summary="Libro Mayor: totales por cuenta hoja con movimiento")
 def libro_mayor(
     db: Session = Depends(get_db),
+    user: Usuario = Depends(require_permission("reportes", "ver")),
     periodo_id: Optional[int] = Query(None, description="Filtrar por periodo"),
     q: Optional[str] = Query(None, description="Buscar por código o nombre"),
 ):
@@ -61,6 +64,7 @@ def libro_mayor(
 def mayor_cuenta(
     codigo: str,
     db: Session = Depends(get_db),
+    user: Usuario = Depends(require_permission("reportes", "ver")),
     periodo_id: Optional[int] = Query(None, description="Filtrar por periodo"),
 ):
     cta = db.execute(
@@ -105,6 +109,7 @@ def mayor_cuenta(
 @router.get("/balanza", summary="Balanza de Comprobación (sumas y saldos, nivel 3)")
 def balanza(
     db: Session = Depends(get_db),
+    user: Usuario = Depends(require_permission("reportes", "ver")),
     periodo_id: Optional[int] = Query(None, description="Filtrar por periodo"),
 ):
     cond_p, par = _periodo_filtro(periodo_id, db)
@@ -183,6 +188,7 @@ def _saldos_nivel3(clase: str, db: Session, cond_p: str, par: dict):
 @router.get("/resultados", summary="Estado de Pérdidas y Ganancias (5 menos 4)")
 def resultados(
     db: Session = Depends(get_db),
+    user: Usuario = Depends(require_permission("reportes", "ver")),
     periodo_id: Optional[int] = Query(None, description="Filtrar por periodo"),
 ):
     cond_p, par = _periodo_filtro(periodo_id, db)
@@ -217,6 +223,7 @@ def resultados(
 @router.get("/balance-general", summary="Balance General (1 = 2 + 3 + resultado)")
 def balance_general(
     db: Session = Depends(get_db),
+    user: Usuario = Depends(require_permission("reportes", "ver")),
     periodo_id: Optional[int] = Query(None, description="Filtrar por periodo"),
 ):
     cond_p, par = _periodo_filtro(periodo_id, db)

@@ -12,11 +12,17 @@ export const useAuthStore = defineStore('auth', () => {
   const esAdmin = computed(
     () => usuario.value?.rol_codigos?.includes('admin') ?? false
   )
-  const tienePermiso = (_modulo, _accion) => {
+  const permisos = computed(() => usuario.value?.permiso_codigos ?? [])
+
+  /** ¿El usuario tiene el permiso "modulo.accion"? */
+  const tienePermiso = codigo => {
     if (!usuario.value) return false
     if (esAdmin.value) return true
-    return usuario.value.rol_codigos?.length > 0
+    return permisos.value.includes(codigo)
   }
+
+  /** ¿Tiene alguno de los permisos indicados? */
+  const tieneAlguno = (...codigos) => codigos.some(c => tienePermiso(c))
 
   async function login(username, password) {
     cargando.value = true
@@ -63,7 +69,9 @@ export const useAuthStore = defineStore('auth', () => {
     error,
     estaAutenticado,
     esAdmin,
+    permisos,
     tienePermiso,
+    tieneAlguno,
     login,
     logout,
     init

@@ -105,7 +105,7 @@ def login(form: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get
 
 
 @router.post("/register", response_model=UsuarioOut, status_code=201, summary="Registrar usuario (solo admin)")
-def register(data: UsuarioCreate, db: Session = Depends(get_db), user: Usuario = Depends(require_permission("admin", "crear"))):
+def register(data: UsuarioCreate, db: Session = Depends(get_db), user: Usuario = Depends(require_permission("usuarios", "crear"))):
     if db.query(Usuario).filter(Usuario.username == data.username).first():
         raise HTTPException(400, "El usuario ya existe")
     if db.query(Usuario).filter(Usuario.email == data.email).first():
@@ -161,14 +161,14 @@ def debug_header(authorization: str = Header(None, alias="Authorization")):
 @router.get("/usuarios", response_model=List[UsuarioOut], summary="Listar usuarios")
 def listar_usuarios(
     db: Session = Depends(get_db),
-    user: Usuario = Depends(require_permission("admin", "leer")),
+    user: Usuario = Depends(require_permission("usuarios", "ver")),
     skip: int = 0, limit: int = 50,
 ):
     return db.query(Usuario).offset(skip).limit(limit).all()
 
 
 @router.get("/usuarios/{user_id}", response_model=UsuarioOut)
-def obtener_usuario(user_id: int, db: Session = Depends(get_db), user: Usuario = Depends(require_permission("admin", "leer"))):
+def obtener_usuario(user_id: int, db: Session = Depends(get_db), user: Usuario = Depends(require_permission("usuarios", "ver"))):
     u = db.query(Usuario).filter(Usuario.id == user_id).first()
     if not u:
         raise HTTPException(404, "Usuario no encontrado")
@@ -176,7 +176,7 @@ def obtener_usuario(user_id: int, db: Session = Depends(get_db), user: Usuario =
 
 
 @router.put("/usuarios/{user_id}", response_model=UsuarioOut)
-def actualizar_usuario(user_id: int, data: UsuarioUpdate, db: Session = Depends(get_db), user: Usuario = Depends(require_permission("admin", "editar"))):
+def actualizar_usuario(user_id: int, data: UsuarioUpdate, db: Session = Depends(get_db), user: Usuario = Depends(require_permission("usuarios", "editar"))):
     u = db.query(Usuario).filter(Usuario.id == user_id).first()
     if not u:
         raise HTTPException(404, "Usuario no encontrado")
@@ -198,7 +198,7 @@ def actualizar_usuario(user_id: int, data: UsuarioUpdate, db: Session = Depends(
 
 
 @router.delete("/usuarios/{user_id}", status_code=204)
-def desactivar_usuario(user_id: int, db: Session = Depends(get_db), user: Usuario = Depends(require_permission("admin", "eliminar"))):
+def desactivar_usuario(user_id: int, db: Session = Depends(get_db), user: Usuario = Depends(require_permission("usuarios", "eliminar"))):
     u = db.query(Usuario).filter(Usuario.id == user_id).first()
     if not u:
         raise HTTPException(404, "Usuario no encontrado")
@@ -209,7 +209,7 @@ def desactivar_usuario(user_id: int, db: Session = Depends(get_db), user: Usuari
 # ===================== ROLES =====================
 
 @router.post("/roles", response_model=RolOut, status_code=201)
-def crear_rol(data: RolCreate, db: Session = Depends(get_db), user: Usuario = Depends(require_permission("admin", "crear"))):
+def crear_rol(data: RolCreate, db: Session = Depends(get_db), user: Usuario = Depends(require_permission("usuarios", "crear"))):
     if db.query(Rol).filter(Rol.codigo == data.codigo).first():
         raise HTTPException(400, "El código de rol ya existe")
     r = Rol(codigo=data.codigo, nombre=data.nombre, descripcion=data.descripcion)
@@ -235,7 +235,7 @@ def obtener_rol(rol_id: int, db: Session = Depends(get_db), user: Usuario = Depe
 
 
 @router.put("/roles/{rol_id}", response_model=RolOut)
-def actualizar_rol(rol_id: int, data: RolUpdate, db: Session = Depends(get_db), user: Usuario = Depends(require_permission("admin", "editar"))):
+def actualizar_rol(rol_id: int, data: RolUpdate, db: Session = Depends(get_db), user: Usuario = Depends(require_permission("usuarios", "editar"))):
     r = db.query(Rol).filter(Rol.id == rol_id).first()
     if not r:
         raise HTTPException(404, "Rol no encontrado")
@@ -253,7 +253,7 @@ def actualizar_rol(rol_id: int, data: RolUpdate, db: Session = Depends(get_db), 
 
 
 @router.delete("/roles/{rol_id}", status_code=204)
-def desactivar_rol(rol_id: int, db: Session = Depends(get_db), user: Usuario = Depends(require_permission("admin", "eliminar"))):
+def desactivar_rol(rol_id: int, db: Session = Depends(get_db), user: Usuario = Depends(require_permission("usuarios", "eliminar"))):
     r = db.query(Rol).filter(Rol.id == rol_id).first()
     if not r:
         raise HTTPException(404, "Rol no encontrado")
@@ -264,7 +264,7 @@ def desactivar_rol(rol_id: int, db: Session = Depends(get_db), user: Usuario = D
 # ===================== PERMISOS =====================
 
 @router.post("/permisos", response_model=PermisoOut, status_code=201)
-def crear_permiso(data: PermisoCreate, db: Session = Depends(get_db), user: Usuario = Depends(require_permission("admin", "crear"))):
+def crear_permiso(data: PermisoCreate, db: Session = Depends(get_db), user: Usuario = Depends(require_permission("usuarios", "crear"))):
     if db.query(Permiso).filter(Permiso.codigo == data.codigo).first():
         raise HTTPException(400, "El código de permiso ya existe")
     p = Permiso(**data.model_dump())

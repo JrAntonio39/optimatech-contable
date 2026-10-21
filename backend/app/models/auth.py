@@ -38,6 +38,11 @@ class Usuario(Base):
     def rol_codigos(self) -> list[str]:
         return [r.codigo for r in self.roles]
 
+    @property
+    def permiso_codigos(self) -> list[str]:
+        """Permisos efectivos del usuario (unión de los permisos de sus roles)."""
+        return sorted({p.codigo for r in self.roles for p in r.permisos})
+
 
 class Rol(Base):
     __tablename__ = "rol"

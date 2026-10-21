@@ -7,7 +7,6 @@ import {
 } from 'vue-router'
 
 import routes from './routes.js'
-import { useAuthStore } from '@/stores/auth.js'
 
 /*
  * If not building with SSR mode, you can
@@ -36,25 +35,16 @@ export default defineRouter((/* { store, ssrContext } */) => {
   })
 
   // Guardia de navegación: proteger rutas que requieren autenticación
-  Router.beforeEach((to, from, next) => {
-    const auth = useAuthStore()
-
-    // Inicializar auth desde localStorage si no está cargado
-    if (!localStorage.getItem('token') && auth.estaAutenticado === false) {
-      // No hacer nada, el store se inicializa solo
-    }
-
+  Router.beforeEach(to => {
     if (to.meta.requiresAuth && !localStorage.getItem('token')) {
-      next({ path: '/login', query: { redirect: to.fullPath } })
-      return
+      return { path: '/login', query: { redirect: to.fullPath } }
     }
 
     if (to.path === '/login' && localStorage.getItem('token')) {
-      next({ path: '/catalogo' })
-      return
+      return { path: '/catalogo' }
     }
 
-    next()
+    return true
   })
 
   return Router

@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict B36OdtiayX2xJniJnCFy6RB1aTss775xJc1RUiPzx417KQzg1xQZadAOTJPxdtP
+\restrict DfF5PhvuDI4Awcjg32gR1OmT3KPRTfMJDJNvc7vDgcZZCmgG7BGzbWDAUowFl5I
 
 -- Dumped from database version 17.6
 -- Dumped by pg_dump version 17.6
@@ -19,6 +19,11 @@ SET xmloption = content;
 SET client_min_messages = warning;
 SET row_security = off;
 
+ALTER TABLE IF EXISTS ONLY public.usuario DROP CONSTRAINT IF EXISTS usuario_sucursal_id_fkey;
+ALTER TABLE IF EXISTS ONLY public.usuario_rol DROP CONSTRAINT IF EXISTS usuario_rol_usuario_id_fkey;
+ALTER TABLE IF EXISTS ONLY public.usuario_rol DROP CONSTRAINT IF EXISTS usuario_rol_rol_id_fkey;
+ALTER TABLE IF EXISTS ONLY public.rol_permiso DROP CONSTRAINT IF EXISTS rol_permiso_rol_id_fkey;
+ALTER TABLE IF EXISTS ONLY public.rol_permiso DROP CONSTRAINT IF EXISTS rol_permiso_permiso_id_fkey;
 ALTER TABLE IF EXISTS ONLY public.proveedor DROP CONSTRAINT IF EXISTS proveedor_sucursal_id_fkey;
 ALTER TABLE IF EXISTS ONLY public.proveedor DROP CONSTRAINT IF EXISTS proveedor_cuenta_codigo_fkey;
 ALTER TABLE IF EXISTS ONLY public.planilla DROP CONSTRAINT IF EXISTS planilla_sucursal_id_fkey;
@@ -47,6 +52,11 @@ ALTER TABLE IF EXISTS ONLY public.cliente DROP CONSTRAINT IF EXISTS cliente_cuen
 ALTER TABLE IF EXISTS ONLY public.catalogo_cuenta DROP CONSTRAINT IF EXISTS catalogo_cuenta_codigo_padre_fkey;
 ALTER TABLE IF EXISTS ONLY public.asiento DROP CONSTRAINT IF EXISTS asiento_sucursal_id_fkey;
 ALTER TABLE IF EXISTS ONLY public.asiento DROP CONSTRAINT IF EXISTS asiento_periodo_id_fkey;
+DROP INDEX IF EXISTS public.ix_usuario_username;
+DROP INDEX IF EXISTS public.ix_usuario_email;
+DROP INDEX IF EXISTS public.ix_rol_codigo;
+DROP INDEX IF EXISTS public.ix_permiso_modulo;
+DROP INDEX IF EXISTS public.ix_permiso_codigo;
 DROP INDEX IF EXISTS public.idx_planilla_periodo;
 DROP INDEX IF EXISTS public.idx_planilla_detalle_planilla;
 DROP INDEX IF EXISTS public.idx_factura_detalle_factura;
@@ -60,19 +70,25 @@ DROP INDEX IF EXISTS public.idx_compra_fecha;
 DROP INDEX IF EXISTS public.idx_compra_detalle_compra;
 DROP INDEX IF EXISTS public.idx_asiento_periodo;
 DROP INDEX IF EXISTS public.idx_asiento_fecha;
+ALTER TABLE IF EXISTS ONLY public.usuario_rol DROP CONSTRAINT IF EXISTS usuario_rol_pkey;
+ALTER TABLE IF EXISTS ONLY public.usuario DROP CONSTRAINT IF EXISTS usuario_pkey;
 ALTER TABLE IF EXISTS ONLY public.sucursal DROP CONSTRAINT IF EXISTS sucursal_pkey;
 ALTER TABLE IF EXISTS ONLY public.sucursal DROP CONSTRAINT IF EXISTS sucursal_codigo_key;
+ALTER TABLE IF EXISTS ONLY public.rol DROP CONSTRAINT IF EXISTS rol_pkey;
+ALTER TABLE IF EXISTS ONLY public.rol_permiso DROP CONSTRAINT IF EXISTS rol_permiso_pkey;
 ALTER TABLE IF EXISTS ONLY public.proveedor DROP CONSTRAINT IF EXISTS proveedor_pkey;
 ALTER TABLE IF EXISTS ONLY public.proveedor DROP CONSTRAINT IF EXISTS proveedor_codigo_key;
 ALTER TABLE IF EXISTS ONLY public.planilla DROP CONSTRAINT IF EXISTS planilla_pkey;
 ALTER TABLE IF EXISTS ONLY public.planilla_detalle DROP CONSTRAINT IF EXISTS planilla_detalle_planilla_id_empleado_id_key;
 ALTER TABLE IF EXISTS ONLY public.planilla_detalle DROP CONSTRAINT IF EXISTS planilla_detalle_pkey;
 ALTER TABLE IF EXISTS ONLY public.planilla DROP CONSTRAINT IF EXISTS planilla_codigo_key;
+ALTER TABLE IF EXISTS ONLY public.permiso DROP CONSTRAINT IF EXISTS permiso_pkey;
 ALTER TABLE IF EXISTS ONLY public.periodo_contable DROP CONSTRAINT IF EXISTS periodo_contable_pkey;
 ALTER TABLE IF EXISTS ONLY public.periodo_contable DROP CONSTRAINT IF EXISTS periodo_contable_anio_key;
 ALTER TABLE IF EXISTS ONLY public.factura DROP CONSTRAINT IF EXISTS factura_pkey;
 ALTER TABLE IF EXISTS ONLY public.factura DROP CONSTRAINT IF EXISTS factura_numero_key;
 ALTER TABLE IF EXISTS ONLY public.factura_detalle DROP CONSTRAINT IF EXISTS factura_detalle_pkey;
+ALTER TABLE IF EXISTS ONLY public.empresa DROP CONSTRAINT IF EXISTS empresa_pkey;
 ALTER TABLE IF EXISTS ONLY public.empleado DROP CONSTRAINT IF EXISTS empleado_pkey;
 ALTER TABLE IF EXISTS ONLY public.empleado DROP CONSTRAINT IF EXISTS empleado_dui_key;
 ALTER TABLE IF EXISTS ONLY public.empleado DROP CONSTRAINT IF EXISTS empleado_codigo_key;
@@ -85,13 +101,17 @@ ALTER TABLE IF EXISTS ONLY public.cliente DROP CONSTRAINT IF EXISTS cliente_codi
 ALTER TABLE IF EXISTS ONLY public.catalogo_cuenta DROP CONSTRAINT IF EXISTS catalogo_cuenta_pkey;
 ALTER TABLE IF EXISTS ONLY public.asiento DROP CONSTRAINT IF EXISTS asiento_pkey;
 ALTER TABLE IF EXISTS ONLY public.asiento DROP CONSTRAINT IF EXISTS asiento_codigo_key;
+ALTER TABLE IF EXISTS public.usuario ALTER COLUMN id DROP DEFAULT;
 ALTER TABLE IF EXISTS public.sucursal ALTER COLUMN id DROP DEFAULT;
+ALTER TABLE IF EXISTS public.rol ALTER COLUMN id DROP DEFAULT;
 ALTER TABLE IF EXISTS public.proveedor ALTER COLUMN id DROP DEFAULT;
 ALTER TABLE IF EXISTS public.planilla_detalle ALTER COLUMN id DROP DEFAULT;
 ALTER TABLE IF EXISTS public.planilla ALTER COLUMN id DROP DEFAULT;
+ALTER TABLE IF EXISTS public.permiso ALTER COLUMN id DROP DEFAULT;
 ALTER TABLE IF EXISTS public.periodo_contable ALTER COLUMN id DROP DEFAULT;
 ALTER TABLE IF EXISTS public.factura_detalle ALTER COLUMN id DROP DEFAULT;
 ALTER TABLE IF EXISTS public.factura ALTER COLUMN id DROP DEFAULT;
+ALTER TABLE IF EXISTS public.empresa ALTER COLUMN id DROP DEFAULT;
 ALTER TABLE IF EXISTS public.empleado ALTER COLUMN id DROP DEFAULT;
 ALTER TABLE IF EXISTS public.detalle_asiento ALTER COLUMN id DROP DEFAULT;
 ALTER TABLE IF EXISTS public.compra_detalle ALTER COLUMN id DROP DEFAULT;
@@ -111,20 +131,30 @@ DROP VIEW IF EXISTS public.v_compra_detalle_total;
 DROP VIEW IF EXISTS public.v_catalogo_es_mayor;
 DROP VIEW IF EXISTS public.v_balanza_comprobacion;
 DROP VIEW IF EXISTS public.v_asiento_totales;
+DROP TABLE IF EXISTS public.usuario_rol;
+DROP SEQUENCE IF EXISTS public.usuario_id_seq;
+DROP TABLE IF EXISTS public.usuario;
 DROP SEQUENCE IF EXISTS public.sucursal_id_seq;
 DROP TABLE IF EXISTS public.sucursal;
+DROP TABLE IF EXISTS public.rol_permiso;
+DROP SEQUENCE IF EXISTS public.rol_id_seq;
+DROP TABLE IF EXISTS public.rol;
 DROP SEQUENCE IF EXISTS public.proveedor_id_seq;
 DROP TABLE IF EXISTS public.proveedor;
 DROP SEQUENCE IF EXISTS public.planilla_id_seq;
 DROP SEQUENCE IF EXISTS public.planilla_detalle_id_seq;
 DROP TABLE IF EXISTS public.planilla_detalle;
 DROP TABLE IF EXISTS public.planilla;
+DROP SEQUENCE IF EXISTS public.permiso_id_seq;
+DROP TABLE IF EXISTS public.permiso;
 DROP SEQUENCE IF EXISTS public.periodo_contable_id_seq;
 DROP TABLE IF EXISTS public.periodo_contable;
 DROP SEQUENCE IF EXISTS public.factura_id_seq;
 DROP SEQUENCE IF EXISTS public.factura_detalle_id_seq;
 DROP TABLE IF EXISTS public.factura_detalle;
 DROP TABLE IF EXISTS public.factura;
+DROP SEQUENCE IF EXISTS public.empresa_id_seq;
+DROP TABLE IF EXISTS public.empresa;
 DROP SEQUENCE IF EXISTS public.empleado_id_seq;
 DROP TABLE IF EXISTS public.empleado;
 DROP SEQUENCE IF EXISTS public.detalle_asiento_id_seq;
@@ -432,6 +462,44 @@ ALTER SEQUENCE public.empleado_id_seq OWNED BY public.empleado.id;
 
 
 --
+-- Name: empresa; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.empresa (
+    id integer NOT NULL,
+    razon_social character varying(150) NOT NULL,
+    nombre_comercial character varying(100) NOT NULL,
+    nit character varying(20),
+    nrc character varying(20),
+    giro text
+);
+
+
+ALTER TABLE public.empresa OWNER TO postgres;
+
+--
+-- Name: empresa_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE public.empresa_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER SEQUENCE public.empresa_id_seq OWNER TO postgres;
+
+--
+-- Name: empresa_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+--
+
+ALTER SEQUENCE public.empresa_id_seq OWNED BY public.empresa.id;
+
+
+--
 -- Name: factura; Type: TABLE; Schema: public; Owner: postgres
 --
 
@@ -551,6 +619,44 @@ ALTER SEQUENCE public.periodo_contable_id_seq OWNER TO postgres;
 --
 
 ALTER SEQUENCE public.periodo_contable_id_seq OWNED BY public.periodo_contable.id;
+
+
+--
+-- Name: permiso; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.permiso (
+    id integer NOT NULL,
+    codigo character varying(50) NOT NULL,
+    nombre character varying(100) NOT NULL,
+    modulo character varying(30) NOT NULL,
+    accion character varying(20) NOT NULL,
+    descripcion character varying(255)
+);
+
+
+ALTER TABLE public.permiso OWNER TO postgres;
+
+--
+-- Name: permiso_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE public.permiso_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER SEQUENCE public.permiso_id_seq OWNER TO postgres;
+
+--
+-- Name: permiso_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+--
+
+ALTER SEQUENCE public.permiso_id_seq OWNED BY public.permiso.id;
 
 
 --
@@ -686,6 +792,55 @@ ALTER SEQUENCE public.proveedor_id_seq OWNED BY public.proveedor.id;
 
 
 --
+-- Name: rol; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.rol (
+    id integer NOT NULL,
+    codigo character varying(30) NOT NULL,
+    nombre character varying(100) NOT NULL,
+    descripcion character varying(255),
+    activo boolean
+);
+
+
+ALTER TABLE public.rol OWNER TO postgres;
+
+--
+-- Name: rol_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE public.rol_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER SEQUENCE public.rol_id_seq OWNER TO postgres;
+
+--
+-- Name: rol_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+--
+
+ALTER SEQUENCE public.rol_id_seq OWNED BY public.rol.id;
+
+
+--
+-- Name: rol_permiso; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.rol_permiso (
+    rol_id integer NOT NULL,
+    permiso_id integer NOT NULL
+);
+
+
+ALTER TABLE public.rol_permiso OWNER TO postgres;
+
+--
 -- Name: sucursal; Type: TABLE; Schema: public; Owner: postgres
 --
 
@@ -724,6 +879,59 @@ ALTER SEQUENCE public.sucursal_id_seq OWNER TO postgres;
 
 ALTER SEQUENCE public.sucursal_id_seq OWNED BY public.sucursal.id;
 
+
+--
+-- Name: usuario; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.usuario (
+    id integer NOT NULL,
+    username character varying(50) NOT NULL,
+    email character varying(100) NOT NULL,
+    password_hash character varying(255) NOT NULL,
+    nombre_completo character varying(150) NOT NULL,
+    activo boolean,
+    fecha_creacion timestamp without time zone,
+    ultimo_acceso timestamp without time zone,
+    sucursal_id integer
+);
+
+
+ALTER TABLE public.usuario OWNER TO postgres;
+
+--
+-- Name: usuario_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE public.usuario_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER SEQUENCE public.usuario_id_seq OWNER TO postgres;
+
+--
+-- Name: usuario_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+--
+
+ALTER SEQUENCE public.usuario_id_seq OWNED BY public.usuario.id;
+
+
+--
+-- Name: usuario_rol; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.usuario_rol (
+    usuario_id integer NOT NULL,
+    rol_id integer NOT NULL
+);
+
+
+ALTER TABLE public.usuario_rol OWNER TO postgres;
 
 --
 -- Name: v_asiento_totales; Type: VIEW; Schema: public; Owner: postgres
@@ -1000,6 +1208,13 @@ ALTER TABLE ONLY public.empleado ALTER COLUMN id SET DEFAULT nextval('public.emp
 
 
 --
+-- Name: empresa id; Type: DEFAULT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.empresa ALTER COLUMN id SET DEFAULT nextval('public.empresa_id_seq'::regclass);
+
+
+--
 -- Name: factura id; Type: DEFAULT; Schema: public; Owner: postgres
 --
 
@@ -1018,6 +1233,13 @@ ALTER TABLE ONLY public.factura_detalle ALTER COLUMN id SET DEFAULT nextval('pub
 --
 
 ALTER TABLE ONLY public.periodo_contable ALTER COLUMN id SET DEFAULT nextval('public.periodo_contable_id_seq'::regclass);
+
+
+--
+-- Name: permiso id; Type: DEFAULT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.permiso ALTER COLUMN id SET DEFAULT nextval('public.permiso_id_seq'::regclass);
 
 
 --
@@ -1042,10 +1264,24 @@ ALTER TABLE ONLY public.proveedor ALTER COLUMN id SET DEFAULT nextval('public.pr
 
 
 --
+-- Name: rol id; Type: DEFAULT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.rol ALTER COLUMN id SET DEFAULT nextval('public.rol_id_seq'::regclass);
+
+
+--
 -- Name: sucursal id; Type: DEFAULT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.sucursal ALTER COLUMN id SET DEFAULT nextval('public.sucursal_id_seq'::regclass);
+
+
+--
+-- Name: usuario id; Type: DEFAULT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.usuario ALTER COLUMN id SET DEFAULT nextval('public.usuario_id_seq'::regclass);
 
 
 --
@@ -1345,6 +1581,14 @@ COPY public.empleado (id, codigo, nombres, apellidos, dui, nit, cargo, salario_b
 
 
 --
+-- Data for Name: empresa; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY public.empresa (id, razon_social, nombre_comercial, nit, nrc, giro) FROM stdin;
+\.
+
+
+--
 -- Data for Name: factura; Type: TABLE DATA; Schema: public; Owner: postgres
 --
 
@@ -1369,6 +1613,52 @@ COPY public.factura_detalle (id, factura_id, descripcion, cantidad, precio_unita
 
 COPY public.periodo_contable (id, anio, fecha_inicio, fecha_fin, estado) FROM stdin;
 1	2026	2026-01-01	2026-12-31	ABIERTO
+\.
+
+
+--
+-- Data for Name: permiso; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY public.permiso (id, codigo, nombre, modulo, accion, descripcion) FROM stdin;
+99	cuentas.ver	Cuentas · Ver	cuentas	ver	Ver el catálogo de cuentas
+100	cuentas.crear	Cuentas · Crear	cuentas	crear	Agregar cuentas al catálogo
+101	cuentas.editar	Cuentas · Editar	cuentas	editar	Modificar cuentas del catálogo
+102	cuentas.eliminar	Cuentas · Eliminar	cuentas	eliminar	Eliminar cuentas del catálogo
+103	asientos.ver	Asientos · Ver	asientos	ver	Ver asientos y libro diario
+104	asientos.crear	Asientos · Crear	asientos	crear	Registrar asientos contables
+105	asientos.editar	Asientos · Editar	asientos	editar	Modificar asientos en borrador
+106	asientos.eliminar	Asientos · Eliminar	asientos	eliminar	Eliminar asientos en borrador
+107	asientos.aprobar	Asientos · Aprobar	asientos	aprobar	Aprobar asientos para contabilizar
+108	asientos.anular	Asientos · Anular	asientos	anular	Anular asientos contabilizados
+109	periodos.ver	Periodos · Ver	periodos	ver	Ver períodos contables
+110	periodos.crear	Periodos · Crear	periodos	crear	Abrir nuevos períodos
+111	periodos.editar	Periodos · Editar	periodos	editar	Modificar datos de períodos
+112	periodos.cerrar	Periodos · Cerrar	periodos	cerrar	Cerrar períodos contables
+113	sucursales.ver	Sucursales · Ver	sucursales	ver	Ver sucursales
+114	sucursales.crear	Sucursales · Crear	sucursales	crear	Crear sucursales
+115	sucursales.editar	Sucursales · Editar	sucursales	editar	Editar sucursales
+116	facturas.ver	Facturas · Ver	facturas	ver	Ver facturas
+117	facturas.crear	Facturas · Crear	facturas	crear	Emitir facturas electrónicas
+118	facturas.editar	Facturas · Editar	facturas	editar	Editar facturas en borrador
+119	facturas.eliminar	Facturas · Eliminar	facturas	eliminar	Eliminar facturas en borrador
+120	facturas.aprobar	Facturas · Aprobar	facturas	aprobar	Aprobar facturas para contabilizar
+121	facturas.anular	Facturas · Anular	facturas	anular	Anular facturas emitidas
+122	compras.ver	Compras · Ver	compras	ver	Ver compras y proveedores
+123	compras.crear	Compras · Crear	compras	crear	Registrar compras
+124	compras.editar	Compras · Editar	compras	editar	Editar compras en borrador
+125	compras.aprobar	Compras · Aprobar	compras	aprobar	Aprobar compras para contabilizar
+126	planilla.ver	Planilla · Ver	planilla	ver	Ver planilla de salarios
+127	planilla.crear	Planilla · Crear	planilla	crear	Crear planilla de salarios
+128	planilla.editar	Planilla · Editar	planilla	editar	Editar planilla de salarios
+129	planilla.aprobar	Planilla · Aprobar	planilla	aprobar	Aprobar planilla para contabilizar
+130	reportes.ver	Reportes · Ver	reportes	ver	Ver reportes contables
+131	reportes.crear	Reportes · Crear	reportes	crear	Exportar reportes
+132	usuarios.ver	Usuarios · Ver	usuarios	ver	Ver usuarios del sistema
+133	usuarios.crear	Usuarios · Crear	usuarios	crear	Crear usuarios
+134	usuarios.editar	Usuarios · Editar	usuarios	editar	Editar usuarios y roles
+135	usuarios.eliminar	Usuarios · Eliminar	usuarios	eliminar	Desactivar usuarios
+136	auditoria.ver	Auditoria · Ver	auditoria	ver	Ver bitácora de auditoría
 \.
 
 
@@ -1400,6 +1690,126 @@ COPY public.proveedor (id, codigo, nombre, nit, nrc, direccion, telefono, email,
 
 
 --
+-- Data for Name: rol; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY public.rol (id, codigo, nombre, descripcion, activo) FROM stdin;
+8	admin	Administrador	Acceso total	t
+9	contador	Contador	Gestión contable	t
+10	auxiliar	Auxiliar Contable	Registro operaciones	t
+11	ventas	Ventas	Facturación	t
+12	compras	Compras	Compras	t
+13	planilla	Planilla	Nómina	t
+14	auditor	Auditor	Solo lectura	t
+\.
+
+
+--
+-- Data for Name: rol_permiso; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY public.rol_permiso (rol_id, permiso_id) FROM stdin;
+8	100
+9	100
+8	121
+11	121
+8	101
+9	101
+8	122
+9	122
+12	122
+14	122
+8	102
+8	123
+12	123
+8	103
+9	103
+10	103
+14	103
+8	124
+12	124
+8	104
+9	104
+10	104
+8	125
+12	125
+8	105
+9	105
+10	105
+8	126
+9	126
+13	126
+14	126
+8	106
+9	106
+8	127
+13	127
+8	107
+9	107
+8	128
+13	128
+8	108
+9	108
+8	129
+13	129
+8	109
+9	109
+10	109
+14	109
+8	130
+9	130
+10	130
+11	130
+12	130
+13	130
+14	130
+8	110
+9	110
+8	131
+9	131
+8	111
+9	111
+8	132
+14	132
+8	112
+9	112
+8	133
+8	113
+9	113
+10	113
+14	113
+8	134
+8	114
+9	114
+8	135
+8	115
+9	115
+8	136
+9	136
+14	136
+8	116
+9	116
+11	116
+14	116
+8	117
+11	117
+8	118
+11	118
+8	119
+11	119
+8	120
+11	120
+8	99
+9	99
+10	99
+11	99
+12	99
+13	99
+14	99
+\.
+
+
+--
 -- Data for Name: sucursal; Type: TABLE DATA; Schema: public; Owner: postgres
 --
 
@@ -1407,6 +1817,24 @@ COPY public.sucursal (id, codigo, nombre, direccion, es_matriz, razon_social, ni
 1	MATRIZ	Casa Matriz - San Salvador	\N	t	OptimaTech Empresarial, S.A. de C.V.	0614-290826-001-5	123456-7
 2	OCC	Sucursal Occidente - Santa Ana	\N	f	\N	\N	\N
 3	ORI	Sucursal Oriente - San Miguel	\N	f	\N	\N	\N
+\.
+
+
+--
+-- Data for Name: usuario; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY public.usuario (id, username, email, password_hash, nombre_completo, activo, fecha_creacion, ultimo_acceso, sucursal_id) FROM stdin;
+2	admin	admin@optimatech.com	$pbkdf2-sha256$29000$NyZESEkphdAaY0zJmRNCaA$fmuEcxdDMTSuk1Djz8h08Sd8JwN4Ybv9Rlwha3MT2.Y	Administrador	t	2026-10-20 03:22:18.55509	2026-10-21 18:30:16.98631	\N
+\.
+
+
+--
+-- Data for Name: usuario_rol; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY public.usuario_rol (usuario_id, rol_id) FROM stdin;
+2	8
 \.
 
 
@@ -1453,6 +1881,13 @@ SELECT pg_catalog.setval('public.empleado_id_seq', 2, true);
 
 
 --
+-- Name: empresa_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
+--
+
+SELECT pg_catalog.setval('public.empresa_id_seq', 1, false);
+
+
+--
 -- Name: factura_detalle_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
 --
 
@@ -1471,6 +1906,13 @@ SELECT pg_catalog.setval('public.factura_id_seq', 1, true);
 --
 
 SELECT pg_catalog.setval('public.periodo_contable_id_seq', 1, true);
+
+
+--
+-- Name: permiso_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
+--
+
+SELECT pg_catalog.setval('public.permiso_id_seq', 136, true);
 
 
 --
@@ -1495,10 +1937,24 @@ SELECT pg_catalog.setval('public.proveedor_id_seq', 1, false);
 
 
 --
+-- Name: rol_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
+--
+
+SELECT pg_catalog.setval('public.rol_id_seq', 14, true);
+
+
+--
 -- Name: sucursal_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
 --
 
 SELECT pg_catalog.setval('public.sucursal_id_seq', 3, true);
+
+
+--
+-- Name: usuario_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
+--
+
+SELECT pg_catalog.setval('public.usuario_id_seq', 5, true);
 
 
 --
@@ -1598,6 +2054,14 @@ ALTER TABLE ONLY public.empleado
 
 
 --
+-- Name: empresa empresa_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.empresa
+    ADD CONSTRAINT empresa_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: factura_detalle factura_detalle_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
 --
 
@@ -1635,6 +2099,14 @@ ALTER TABLE ONLY public.periodo_contable
 
 ALTER TABLE ONLY public.periodo_contable
     ADD CONSTRAINT periodo_contable_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: permiso permiso_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.permiso
+    ADD CONSTRAINT permiso_pkey PRIMARY KEY (id);
 
 
 --
@@ -1686,6 +2158,22 @@ ALTER TABLE ONLY public.proveedor
 
 
 --
+-- Name: rol_permiso rol_permiso_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.rol_permiso
+    ADD CONSTRAINT rol_permiso_pkey PRIMARY KEY (rol_id, permiso_id);
+
+
+--
+-- Name: rol rol_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.rol
+    ADD CONSTRAINT rol_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: sucursal sucursal_codigo_key; Type: CONSTRAINT; Schema: public; Owner: postgres
 --
 
@@ -1699,6 +2187,22 @@ ALTER TABLE ONLY public.sucursal
 
 ALTER TABLE ONLY public.sucursal
     ADD CONSTRAINT sucursal_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: usuario usuario_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.usuario
+    ADD CONSTRAINT usuario_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: usuario_rol usuario_rol_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.usuario_rol
+    ADD CONSTRAINT usuario_rol_pkey PRIMARY KEY (usuario_id, rol_id);
 
 
 --
@@ -1790,6 +2294,41 @@ CREATE INDEX idx_planilla_detalle_planilla ON public.planilla_detalle USING btre
 --
 
 CREATE INDEX idx_planilla_periodo ON public.planilla USING btree (periodo);
+
+
+--
+-- Name: ix_permiso_codigo; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE UNIQUE INDEX ix_permiso_codigo ON public.permiso USING btree (codigo);
+
+
+--
+-- Name: ix_permiso_modulo; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX ix_permiso_modulo ON public.permiso USING btree (modulo);
+
+
+--
+-- Name: ix_rol_codigo; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE UNIQUE INDEX ix_rol_codigo ON public.rol USING btree (codigo);
+
+
+--
+-- Name: ix_usuario_email; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE UNIQUE INDEX ix_usuario_email ON public.usuario USING btree (email);
+
+
+--
+-- Name: ix_usuario_username; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE UNIQUE INDEX ix_usuario_username ON public.usuario USING btree (username);
 
 
 --
@@ -2017,6 +2556,46 @@ ALTER TABLE ONLY public.proveedor
 
 
 --
+-- Name: rol_permiso rol_permiso_permiso_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.rol_permiso
+    ADD CONSTRAINT rol_permiso_permiso_id_fkey FOREIGN KEY (permiso_id) REFERENCES public.permiso(id);
+
+
+--
+-- Name: rol_permiso rol_permiso_rol_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.rol_permiso
+    ADD CONSTRAINT rol_permiso_rol_id_fkey FOREIGN KEY (rol_id) REFERENCES public.rol(id);
+
+
+--
+-- Name: usuario_rol usuario_rol_rol_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.usuario_rol
+    ADD CONSTRAINT usuario_rol_rol_id_fkey FOREIGN KEY (rol_id) REFERENCES public.rol(id);
+
+
+--
+-- Name: usuario_rol usuario_rol_usuario_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.usuario_rol
+    ADD CONSTRAINT usuario_rol_usuario_id_fkey FOREIGN KEY (usuario_id) REFERENCES public.usuario(id);
+
+
+--
+-- Name: usuario usuario_sucursal_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.usuario
+    ADD CONSTRAINT usuario_sucursal_id_fkey FOREIGN KEY (sucursal_id) REFERENCES public.sucursal(id);
+
+
+--
 -- Name: SCHEMA public; Type: ACL; Schema: -; Owner: postgres
 --
 
@@ -2027,5 +2606,5 @@ REVOKE USAGE ON SCHEMA public FROM PUBLIC;
 -- PostgreSQL database dump complete
 --
 
-\unrestrict B36OdtiayX2xJniJnCFy6RB1aTss775xJc1RUiPzx417KQzg1xQZadAOTJPxdtP
+\unrestrict DfF5PhvuDI4Awcjg32gR1OmT3KPRTfMJDJNvc7vDgcZZCmgG7BGzbWDAUowFl5I
 

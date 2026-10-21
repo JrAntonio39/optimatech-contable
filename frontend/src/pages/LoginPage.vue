@@ -1,5 +1,5 @@
 <template>
-  <q-page class="flex flex-center q-pa-md">
+  <div class="flex flex-center q-pa-md" style="min-height: 100vh">
     <q-card class="q-mt-xl" style="width: 100%; max-width: 400px">
       <q-card-section class="text-center">
         <q-icon name="business" color="primary" size="64px" class="q-mb-md" />
@@ -57,7 +57,7 @@
         Usuario demo: <strong>admin</strong> / <strong>admin123</strong>
       </q-card-section>
     </q-card>
-  </q-page>
+  </div>
 </template>
 
 <script setup>

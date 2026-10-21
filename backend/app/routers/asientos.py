@@ -5,6 +5,8 @@ from datetime import date
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 from app.database import get_db
+from app.models.auth import Usuario
+from app.routers.auth import require_permission
 
 router = APIRouter(prefix="/api/asientos", tags=["Asientos"])
 
@@ -37,6 +39,7 @@ def _totales(detalles):
 @router.get("", summary="Lista asientos con sus totales")
 def listar_asientos(
     db: Session = Depends(get_db),
+    user: Usuario = Depends(require_permission("asientos", "ver")),
     tipo: str = Query(None, description="APERTURA | DIARIO | AJUSTE | CIERRE"),
     periodo_id: int = Query(None),
     sucursal_id: int = Query(None),
@@ -73,13 +76,20 @@ def listar_asientos(
 
 
 @router.get("/totales", summary="Totales calculados (vista v_asiento_totales)")
-def totales_asientos(db: Session = Depends(get_db)):
+def totales_asientos(
+    db: Session = Depends(get_db),
+    user: Usuario = Depends(require_permission("asientos", "ver")),
+):
     rows = db.execute(text("SELECT * FROM v_asiento_totales ORDER BY codigo")).mappings().all()
     return {"total": len(rows), "totales": [dict(r) for r in rows]}
 
 
 @router.get("/{asiento_id}", summary="Detalle de un asiento con sus líneas")
-def detalle_asiento(asiento_id: int, db: Session = Depends(get_db)):
+def detalle_asiento(
+    asiento_id: int,
+    db: Session = Depends(get_db),
+    user: Usuario = Depends(require_permission("asientos", "ver")),
+):
     cab = db.execute(text("SELECT * FROM asiento WHERE id=:i"), {"i": asiento_id}).mappings().first()
     if not cab:
         raise HTTPException(404, f"Asiento {asiento_id} no encontrado")
@@ -94,7 +104,11 @@ def detalle_asiento(asiento_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("", status_code=201, summary="Registrar un asiento (valida partida doble)")
-def crear_asiento(data: AsientoCreate, db: Session = Depends(get_db)):
+def crear_asiento(
+    data: AsientoCreate,
+    db: Session = Depends(get_db),
+    user: Usuario = Depends(require_permission("asientos", "crear")),
+):
     if data.tipo not in TIPOS:
         raise HTTPException(400, f"Tipo inválido. Use: {', '.join(TIPOS)}")
     if len(data.detalles) < 2:

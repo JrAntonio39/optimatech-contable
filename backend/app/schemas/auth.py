@@ -25,6 +25,7 @@ class UsuarioOut(UsuarioBase):
     fecha_creacion: datetime
     ultimo_acceso: Optional[datetime]
     rol_codigos: List[str] = []  # códigos de rol
+    permiso_codigos: List[str] = []  # permisos efectivos del usuario
 
     class Config:
         from_attributes = True

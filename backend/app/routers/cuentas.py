@@ -4,6 +4,8 @@ from typing import Optional
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 from app.database import get_db
+from app.models.auth import Usuario
+from app.routers.auth import require_permission
 
 router = APIRouter(prefix="/api/cuentas", tags=["Cuentas"])
 
@@ -19,7 +21,12 @@ class CuentaCreate(BaseModel):
 
 
 @router.get("", summary="Lista todas las cuentas del catálogo")
-def listar_cuentas(db: Session = Depends(get_db), nivel: int = Query(None, description="Filtrar por nivel 1-5"), q: str = Query(None, description="Buscar por nombre o código")):
+def listar_cuentas(
+    db: Session = Depends(get_db),
+    user: Usuario = Depends(require_permission("cuentas", "ver")),
+    nivel: int = Query(None, description="Filtrar por nivel 1-5"),
+    q: str = Query(None, description="Buscar por nombre o código"),
+):
     query = "SELECT codigo, nombre, naturaleza, nivel, codigo_padre FROM catalogo_cuenta"
     conds = []
     params = {}
@@ -36,12 +43,16 @@ def listar_cuentas(db: Session = Depends(get_db), nivel: int = Query(None, descr
     return {"total": len(rows), "cuentas": list(rows)}
 
 @router.get("/mayor", summary="Solo cuentas de mayor (nivel 3, las del manual)")
-def cuentas_mayor(db: Session = Depends(get_db)):
+def cuentas_mayor(db: Session = Depends(get_db), user: Usuario = Depends(require_permission("cuentas", "ver"))):
     rows = db.execute(text("SELECT codigo, nombre, naturaleza FROM catalogo_cuenta WHERE nivel=3 ORDER BY codigo")).mappings().all()
     return {"total": len(rows), "cuentas": list(rows)}
 
 @router.post("", status_code=201, summary="Agregar una cuenta al catálogo")
-def crear_cuenta(data: CuentaCreate, db: Session = Depends(get_db)):
+def crear_cuenta(
+    data: CuentaCreate,
+    db: Session = Depends(get_db),
+    user: Usuario = Depends(require_permission("cuentas", "crear")),
+):
     codigo = data.codigo.strip()
     nombre = data.nombre.strip()
     if not codigo or not nombre:
@@ -80,7 +91,11 @@ def crear_cuenta(data: CuentaCreate, db: Session = Depends(get_db)):
     return {"msg": "Cuenta creada", "cuenta": dict(row)}
 
 @router.get("/{codigo}", summary="Detalle de una cuenta")
-def detalle_cuenta(codigo: str, db: Session = Depends(get_db)):
+def detalle_cuenta(
+    codigo: str,
+    db: Session = Depends(get_db),
+    user: Usuario = Depends(require_permission("cuentas", "ver")),
+):
     row = db.execute(text("SELECT codigo, nombre, naturaleza, nivel, codigo_padre FROM catalogo_cuenta WHERE codigo=:c"), {"c": codigo}).mappings().first()
     if not row:
         raise HTTPException(404, f"Cuenta {codigo} no encontrada")
