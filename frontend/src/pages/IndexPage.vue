@@ -63,7 +63,9 @@ const auth = useAuthStore()
 function itemsVisibles(section) {
   return section.items.filter(item => {
     if (!item.permiso) return true
-    return auth.tienePermiso(item.permiso)
+    return Array.isArray(item.permiso)
+      ? item.permiso.some(permiso => auth.tienePermiso(permiso))
+      : auth.tienePermiso(item.permiso)
   })
 }
 </script>

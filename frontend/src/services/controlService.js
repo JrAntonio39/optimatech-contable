@@ -17,6 +17,9 @@ export const controlService = {
   /** Aprueba un asiento: PENDIENTE -> VIGENTE. */
   aprobar: id => api.post(`/api/asientos/${id}/aprobar`),
 
+  /** Rechaza un asiento pendiente sin crear un asiento de reversión. */
+  rechazar: (id, motivo) => api.post(`/api/asientos/${id}/rechazar`, { motivo }),
+
   /**
    * Anula un asiento. El backend genera el asiento de reversión (contra-asiento)
    * dentro de un período abierto, por eso pide periodo_id y fecha_reversion.
@@ -49,6 +52,5 @@ export const controlService = {
     })
     const suffix = qs.toString() ? `?${qs.toString()}` : ''
     return api.get(`/api/auditoria${suffix}`)
-  },
-  resumenAuditoria: () => api.get('/api/auditoria/resumen')
+  }
 }

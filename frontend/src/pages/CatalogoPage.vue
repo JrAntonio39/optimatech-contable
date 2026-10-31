@@ -5,6 +5,7 @@
       <q-badge color="primary" class="q-ml-sm">{{ total }} cuentas</q-badge>
       <q-space />
       <q-btn
+        v-if="auth.tienePermiso('cuentas.crear')"
         color="primary"
         icon="add"
         label="Agregar cuenta"
@@ -62,14 +63,30 @@
     </q-card>
 
     <q-card v-if="seleccionada" class="opti-card q-mt-md">
-      <q-card-section>
-        <div class="text-subtitle1">
-          {{ seleccionada.cuenta.codigo }} — {{ seleccionada.cuenta.nombre }}
+      <q-card-section class="row items-center">
+        <div>
+          <div class="text-subtitle1">
+            {{ seleccionada.cuenta.codigo }} — {{ seleccionada.cuenta.nombre }}
+          </div>
+          <div class="text-caption text-grey-7">
+            Naturaleza {{ seleccionada.cuenta.naturaleza }} · Nivel
+            {{ seleccionada.cuenta.nivel }}
+          </div>
         </div>
-        <div class="text-caption text-grey-7">
-          Naturaleza {{ seleccionada.cuenta.naturaleza }} · Nivel
-          {{ seleccionada.cuenta.nivel }}
-        </div>
+        <q-space />
+        <q-btn
+          v-if="auth.tienePermiso('cuentas.eliminar')"
+          outline
+          color="negative"
+          icon="delete"
+          label="Eliminar cuenta"
+          :disable="seleccionada.hijos.length > 0"
+          @click="confirmacionEliminar = true"
+        >
+          <q-tooltip v-if="seleccionada.hijos.length">
+            Primero elimina sus subcuentas.
+          </q-tooltip>
+        </q-btn>
       </q-card-section>
       <q-card-section>
         <div class="text-subtitle2 q-mb-sm"
@@ -94,12 +111,6 @@
           <div class="text-h6">Agregar cuenta</div>
         </q-card-section>
         <q-card-section class="q-gutter-md">
-          <q-input
-            v-model="form.codigo"
-            label="Código (ej: 1.1.1.04)"
-            outlined
-            dense
-          />
           <q-input v-model="form.nombre" label="Nombre" outlined dense />
           <q-select
             v-model="form.naturaleza"
@@ -111,10 +122,9 @@
           <q-select
             v-model="form.padre"
             :options="opcionesPadre"
-            label="Cuenta padre (vacío = nivel 1)"
+            label="Cuenta padre obligatoria"
             outlined
             dense
-            clearable
             use-input
             fill-input
             hide-selected
@@ -123,9 +133,15 @@
             input-debounce="200"
             @filter="filtrarPadre"
           />
-          <div class="text-caption text-grey-7"
-            >Nivel calculado: {{ nivelCalculado }}</div
-          >
+          <div class="text-caption text-grey-7">
+            Nivel asignado automáticamente: {{ nivelCalculado || 'selecciona una cuenta padre' }}
+          </div>
+          <div v-if="codigoSugerido" class="text-caption text-primary">
+            Código que asignará el sistema: {{ codigoSugerido }}
+          </div>
+          <div class="text-caption text-grey-7">
+            El código y el nivel se generan según la jerarquía. No se pueden crear cuentas raíz ni escribir códigos manuales.
+          </div>
           <q-banner v-if="errorForm" class="bg-red-1 text-red" rounded dense>
             {{ errorForm }}
           </q-banner>
@@ -141,13 +157,37 @@
         </q-card-actions>
       </q-card>
     </q-dialog>
+
+    <q-dialog v-model="confirmacionEliminar" persistent>
+      <q-card style="min-width: 360px; max-width: 480px">
+        <q-card-section>
+          <div class="text-h6">Eliminar cuenta</div>
+        </q-card-section>
+        <q-card-section>
+          ¿Confirmas eliminar <strong>{{ seleccionada?.cuenta.codigo }} — {{ seleccionada?.cuenta.nombre }}</strong>?
+          Solo se pueden eliminar cuentas que no tengan subcuentas ni estén usadas en movimientos, clientes, proveedores, compras, facturas o planillas.
+        </q-card-section>
+        <q-card-actions align="right">
+          <q-btn flat label="Cancelar" v-close-popup />
+          <q-btn
+            color="negative"
+            icon="delete"
+            label="Eliminar"
+            :loading="eliminando"
+            @click="eliminarCuenta"
+          />
+        </q-card-actions>
+      </q-card>
+    </q-dialog>
   </q-page>
 </template>
 
 <script setup>
 import { ref, computed, watch, onMounted } from 'vue'
 import { cuentasService } from '@/services/cuentasService.js'
+import { useAuthStore } from '@/stores/auth.js'
 
+const auth = useAuthStore()
 const total = ref(0)
 const cargando = ref(false)
 const error = ref('')
@@ -156,11 +196,13 @@ const busqueda = ref('')
 const seleccionada = ref(null)
 const seleccionado = ref(null)
 const dialogo = ref(false)
+const confirmacionEliminar = ref(false)
 const guardando = ref(false)
+const eliminando = ref(false)
 const errorForm = ref('')
 const todas = ref([])
 
-const form = ref({ codigo: '', nombre: '', naturaleza: 'Deudora', padre: null })
+const form = ref({ nombre: '', naturaleza: 'Deudora', padre: null })
 
 /** Árbol anidado desde la lista plana (padre -> hijos). Solo raíces al inicio. */
 const arbol = computed(() => {
@@ -194,23 +236,32 @@ function filtrarNodo(nodo, filtro) {
 watch(seleccionado, codigo => {
   if (codigo) verDetalle(codigo)
 })
-const nivelPadre = computed(() => {
-  if (!form.value.padre) return 0
-  const p = todas.value.find(c => c.codigo === form.value.padre)
-  return p ? p.nivel : 0
+const cuentaPadre = computed(() => todas.value.find(c => c.codigo === form.value.padre))
+const nivelCalculado = computed(() => cuentaPadre.value ? cuentaPadre.value.nivel + 1 : null)
+function tieneCodigoJerarquicoValido(cuenta) {
+  const segmentos = cuenta.codigo.split('.')
+  const esRaiz = cuenta.nivel === 1 && segmentos.length === 2 && segmentos[1] === '0'
+  const esSubcuenta = cuenta.nivel > 1 && segmentos.length === cuenta.nivel
+  return (esRaiz || esSubcuenta) && segmentos.every(x => /^\d+$/.test(x))
+}
+const codigoSugerido = computed(() => {
+  if (!cuentaPadre.value || cuentaPadre.value.nivel >= 5) return ''
+  const siblings = todas.value.filter(c => c.codigo_padre === cuentaPadre.value.codigo)
+  const numbers = siblings.map(c => Number(c.codigo.split('.').at(-1))).filter(Number.isInteger)
+  const next = Math.max(0, ...numbers) + 1
+  const width = nivelCalculado.value <= 3 ? 1 : 2
+  const segments = cuentaPadre.value.codigo.split('.')
+  const prefix = cuentaPadre.value.nivel === 1 ? segments[0] : cuentaPadre.value.codigo
+  return `${prefix}.${String(next).padStart(width, '0')}`
 })
-const nivelCalculado = computed(() =>
-  form.value.padre ? nivelPadre.value + 1 : 1
-)
 
 const opcionesPadre = ref([])
 
 function filtrarPadre(val, update) {
   update(() => {
-    const lista = todas.value.map(c => ({
-      label: `${c.codigo} · ${c.nombre}`,
-      value: c.codigo
-    }))
+    const lista = todas.value
+      .filter(c => c.nivel < 5 && tieneCodigoJerarquicoValido(c))
+      .map(c => ({ label: `${c.codigo} · ${c.nombre}`, value: c.codigo }))
     opcionesPadre.value = val
       ? lista
           .filter(o => o.label.toLowerCase().includes(val.toLowerCase()))
@@ -243,7 +294,7 @@ async function verDetalle(codigo) {
 }
 
 function abrirDialogo() {
-  form.value = { codigo: '', nombre: '', naturaleza: 'Deudora', padre: null }
+  form.value = { nombre: '', naturaleza: 'Deudora', padre: null }
   errorForm.value = ''
   dialogo.value = true
 }
@@ -251,18 +302,16 @@ function abrirDialogo() {
 async function guardar() {
   errorForm.value = ''
   ok.value = ''
-  if (!form.value.codigo.trim() || !form.value.nombre.trim()) {
-    errorForm.value = 'Código y nombre son obligatorios.'
+  if (!form.value.padre || !form.value.nombre.trim()) {
+    errorForm.value = 'Selecciona una cuenta padre e ingresa el nombre de la cuenta.'
     return
   }
   guardando.value = true
   try {
     const res = await cuentasService.crear({
-      codigo: form.value.codigo.trim(),
       nombre: form.value.nombre.trim(),
       naturaleza: form.value.naturaleza,
-      nivel: nivelCalculado.value,
-      codigo_padre: form.value.padre || null
+      codigo_padre: form.value.padre
     })
     dialogo.value = false
     ok.value = `Cuenta ${res.cuenta.codigo} creada.`
@@ -272,6 +321,27 @@ async function guardar() {
     errorForm.value = e.message
   } finally {
     guardando.value = false
+  }
+}
+
+async function eliminarCuenta() {
+  if (!seleccionada.value) return
+  eliminando.value = true
+  error.value = ''
+  ok.value = ''
+  const codigo = seleccionada.value.cuenta.codigo
+  try {
+    await cuentasService.eliminar(codigo)
+    confirmacionEliminar.value = false
+    seleccionado.value = null
+    seleccionada.value = null
+    ok.value = `Cuenta ${codigo} eliminada.`
+    await cargar()
+  } catch (e) {
+    error.value = e.message
+    confirmacionEliminar.value = false
+  } finally {
+    eliminando.value = false
   }
 }
 

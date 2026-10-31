@@ -36,12 +36,12 @@ class Usuario(Base):
 
     @property
     def rol_codigos(self) -> list[str]:
-        return [r.codigo for r in self.roles]
+        return [r.codigo for r in self.roles if r.activo]
 
     @property
     def permiso_codigos(self) -> list[str]:
         """Permisos efectivos del usuario (unión de los permisos de sus roles)."""
-        return sorted({p.codigo for r in self.roles for p in r.permisos})
+        return sorted({p.codigo for r in self.roles if r.activo for p in r.permisos})
 
 
 class Rol(Base):

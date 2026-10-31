@@ -113,12 +113,6 @@ const cargando = ref(false)
 const error = ref('')
 const cuentasDemo = [
   {
-    rol: 'Administrador',
-    usuario: 'admin',
-    clave: 'admin123',
-    icono: 'admin_panel_settings'
-  },
-  {
     rol: 'Contador',
     usuario: 'contador',
     clave: 'Demo1234',

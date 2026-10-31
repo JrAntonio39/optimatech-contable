@@ -5,6 +5,7 @@
       <q-badge color="primary" class="q-ml-sm">{{ total }} apertura(s)</q-badge>
       <q-space />
       <q-btn
+        v-if="auth.tienePermiso('asientos.crear')"
         color="primary"
         icon="add"
         label="Registrar balance inicial"
@@ -15,11 +16,6 @@
     <q-banner v-if="error" class="bg-red-1 text-red q-mb-md" rounded>
       {{ error }}
     </q-banner>
-    <q-banner class="bg-blue-1 text-blue-9 q-mb-md" rounded>
-      El balance inicial es el asiento de <b>APERTURA</b> del periodo (01/01).
-      Solo puede existir <b>uno vigente por periodo</b>; el backend lo valida.
-    </q-banner>
-
     <q-card v-if="cargando" flat bordered class="text-center q-pa-md">
       <q-spinner color="primary" size="24px" />
       <span class="q-ml-sm">Cargando apertura…</span>
@@ -120,8 +116,10 @@
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { asientosService } from '@/services/asientosService.js'
+import { useAuthStore } from '@/stores/auth.js'
 
 const router = useRouter()
+const auth = useAuthStore()
 const aperturas = ref([])
 const detalles = ref({})
 const total = ref(0)

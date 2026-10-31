@@ -1,9 +1,9 @@
--- Restaura las credenciales de demostración del usuario administrador.
--- Ejecutar una sola vez en una base ya inicializada; no elimina ni recrea datos.
+-- Restaura la contraseña solicitada para la cuenta de demostración admin.
+-- Ejecutar una sola vez en la base ya inicializada; no modifica otros datos.
 BEGIN;
 
 UPDATE public.usuario
-   SET password_hash = '$pbkdf2-sha256$29000$iG72RDyiFF.VfO9MdMDG9Ia2$3Z3Ers1/RerXorcrcFdaW1r3yWwjEZdgFJUXZbCyn18'
+   SET password_hash = '$pbkdf2-sha256$29000$JOQcY0zJ2fsfQ4hxLmUs5Q$k5d1onYcsx9TEC5vMsLEeN0bDc.IRnQzqwWbc972b88'
  WHERE username = 'admin'
    AND email = 'admin@optimatech.com';
 

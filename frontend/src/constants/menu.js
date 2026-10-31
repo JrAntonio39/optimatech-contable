@@ -56,7 +56,7 @@ export const MENU_SECTIONS = [
         permiso: 'reportes.ver'
       },
       {
-        label: 'Pérdidas y Ganancias',
+        label: 'Estado de resultados',
         caption: 'Estado de resultados',
         icon: 'trending_up',
         to: '/resultados',
@@ -75,18 +75,39 @@ export const MENU_SECTIONS = [
     title: 'Plus',
     items: [
       {
-        label: 'Facturación Electrónica',
-        caption: 'Facturas y clientes',
+        label: 'Facturación',
+        caption: 'Emitir y consultar facturas',
         icon: 'receipt_long',
         to: '/facturacion',
         permiso: 'facturas.ver'
       },
       {
-        label: 'Compras y Proveedores',
-        caption: 'Libro de compras',
+        label: 'Clientes',
+        caption: 'Datos fiscales y contactos',
+        icon: 'groups',
+        to: '/clientes',
+        permiso: 'facturas.ver'
+      },
+      {
+        label: 'Compras',
+        caption: 'Registro de compras',
         icon: 'shopping_cart',
         to: '/compras',
         permiso: 'compras.ver'
+      },
+      {
+        label: 'Proveedores',
+        caption: 'Datos fiscales y contactos',
+        icon: 'local_shipping',
+        to: '/proveedores',
+        permiso: 'compras.ver'
+      },
+      {
+        label: 'Empleados',
+        caption: 'Personal, cargos y sucursales',
+        icon: 'badge',
+        to: '/empleados',
+        permiso: 'planilla.ver'
       },
       {
         label: 'Pago de Salarios',
@@ -105,7 +126,7 @@ export const MENU_SECTIONS = [
         caption: 'Aprobaciones, periodos e historial',
         icon: 'manage_accounts',
         to: '/control',
-        permiso: 'asientos.ver'
+        permiso: ['asientos.ver', 'asientos.aprobar', 'periodos.ver', 'periodos.crear', 'periodos.cerrar', 'sucursales.ver', 'auditoria.ver']
       },
       {
         label: 'Usuarios y roles',

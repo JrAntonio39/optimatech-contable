@@ -18,10 +18,6 @@ from app.services.auditoria import registrar
 
 router = APIRouter(prefix="/api", tags=["Control del sistema"])
 
-ESTADOS_ASIENTO = ("PENDIENTE", "VIGENTE", "ANULADO")
-ESTADOS_PERIODO = ("ABIERTO", "CERRADO")
-
-
 # ==========================================================================
 # 1. ADMINISTRACIÓN DE PERÍODOS CONTABLES
 # ==========================================================================
@@ -30,13 +26,11 @@ class PeriodoCreate(BaseModel):
     anio: int = Field(..., ge=1900, le=2200)
     fecha_inicio: date
     fecha_fin: date
-    estado: str = Field("ABIERTO", pattern="^(ABIERTO|CERRADO)$")
 
 
 class PeriodoUpdate(BaseModel):
     fecha_inicio: Optional[date] = None
     fecha_fin: Optional[date] = None
-    estado: Optional[str] = Field(None, pattern="^(ABIERTO|CERRADO)$")
 
 
 @router.get("/periodos", summary="Listar períodos contables")
@@ -82,15 +76,15 @@ def crear_periodo(
     if cruce:
         raise HTTPException(409, f"El rango se cruza con el período {cruce['anio']}")
     res = db.execute(
-        text("INSERT INTO periodo_contable (anio, fecha_inicio, fecha_fin, estado) VALUES (:a,:i,:f,:e) RETURNING id"),
-        {"a": data.anio, "i": data.fecha_inicio, "f": data.fecha_fin, "e": data.estado},
+        text("INSERT INTO periodo_contable (anio, fecha_inicio, fecha_fin, estado) VALUES (:a,:i,:f,'ABIERTO') RETURNING id"),
+        {"a": data.anio, "i": data.fecha_inicio, "f": data.fecha_fin},
     )
     nuevo_id = res.mappings().first()["id"]
     registrar(
         db, user, "periodos", "periodo_contable", "crear",
         registro_id=nuevo_id, registro_codigo=str(data.anio),
-        descripcion=f"Abrrió el período contable {data.anio} ({data.fecha_inicio} a {data.fecha_fin})",
-        datos_despues={"anio": data.anio, "estado": data.estado},
+        descripcion=f"Abrió el período contable {data.anio} ({data.fecha_inicio} a {data.fecha_fin})",
+        datos_despues={"anio": data.anio, "estado": "ABIERTO"},
     )
     db.commit()
     return {"msg": f"Período {data.anio} creado", "id": nuevo_id}
@@ -108,6 +102,18 @@ def actualizar_periodo(
         raise HTTPException(404, f"Período {periodo_id} no encontrado")
     if cab["estado"] == "CERRADO":
         raise HTTPException(400, f"El período {cab['anio']} está CERRADO y no admite cambios")
+    fecha_inicio = data.fecha_inicio or cab["fecha_inicio"]
+    fecha_fin = data.fecha_fin or cab["fecha_fin"]
+    if fecha_fin <= fecha_inicio:
+        raise HTTPException(400, "La fecha de fin debe ser posterior a la de inicio")
+    if fecha_inicio.year != cab["anio"] or fecha_fin.year != cab["anio"]:
+        raise HTTPException(400, "Las fechas deben pertenecer al año del período")
+    cruce = db.execute(
+        text("SELECT anio FROM periodo_contable WHERE id<>:id AND NOT (fecha_fin<:inicio OR fecha_inicio>:fin)"),
+        {"id": periodo_id, "inicio": fecha_inicio, "fin": fecha_fin},
+    ).mappings().first()
+    if cruce:
+        raise HTTPException(409, f"El rango se cruza con el período {cruce['anio']}")
     antes = dict(cab)
     campos, params = [], {"i": periodo_id}
     if data.fecha_inicio:
@@ -116,9 +122,6 @@ def actualizar_periodo(
     if data.fecha_fin:
         campos.append("fecha_fin = :ff")
         params["ff"] = data.fecha_fin
-    if data.estado:
-        campos.append("estado = :e")
-        params["e"] = data.estado
     if campos:
         db.execute(text(f"UPDATE periodo_contable SET {', '.join(campos)} WHERE id = :i"), params)
     registrar(
@@ -126,7 +129,7 @@ def actualizar_periodo(
         registro_id=periodo_id, registro_codigo=str(antes["anio"]),
         descripcion=f"Modificó el período contable {antes['anio']}",
         datos_antes={"estado": antes["estado"], "fecha_inicio": str(antes["fecha_inicio"]), "fecha_fin": str(antes["fecha_fin"])},
-        datos_despues={"estado": data.estado or antes["estado"]},
+        datos_despues={"estado": antes["estado"], "fecha_inicio": str(fecha_inicio), "fecha_fin": str(fecha_fin)},
     )
     db.commit()
     return {"msg": f"Período {antes['anio']} actualizado"}
@@ -212,7 +215,7 @@ def listar_sucursales(
 ):
     rows = db.execute(
         text("""
-        SELECT s.id, s.codigo, s.nombre, s.direccion, s.es_matriz, s.empresa_id,
+        SELECT s.id, s.codigo, s.nombre, s.direccion, s.es_matriz,
                (SELECT COUNT(*) FROM asiento a WHERE a.sucursal_id = s.id) AS num_asientos
           FROM sucursal s ORDER BY s.es_matriz DESC, s.nombre
         """)

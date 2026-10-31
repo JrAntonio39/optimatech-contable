@@ -8,7 +8,6 @@
     <q-banner v-if="ok" class="bg-green-1 text-green-9 q-mb-md" rounded>
       {{ ok }}
     </q-banner>
-
     <q-card class="opti-card q-mb-md">
       <q-card-section>
         <div class="text-subtitle1 q-mb-md">Datos del asiento</div>
@@ -20,7 +19,14 @@
               label="Fecha"
               outlined
               dense
+              :error="!!errorFecha"
+              :error-message="errorFecha"
             />
+            <div v-if="periodoSeleccionado" class="text-caption text-grey-7 q-mt-xs">
+              Fechas permitidas: {{ mostrarFecha(periodoSeleccionado.fecha_inicio) }} a
+              {{ mostrarFecha(periodoSeleccionado.fecha_fin) }}.
+              Si cambias de período, la fecha se ajustará dentro de ese rango.
+            </div>
           </div>
           <div class="col-12 col-md-4">
             <q-input v-model="cab.concepto" label="Concepto" outlined dense />
@@ -39,7 +45,7 @@
           <div class="col-12 col-md-2">
             <q-select
               v-model="cab.periodo_id"
-              :options="periodos"
+              :options="periodosAbiertos"
               option-value="id"
               option-label="anio"
               label="Periodo"
@@ -48,6 +54,9 @@
               emit-value
               map-options
             />
+            <div v-if="!periodosAbiertos.length" class="text-caption text-negative q-mt-xs">
+              No hay períodos abiertos. Abre un período desde Control y auditoría para registrar asientos.
+            </div>
           </div>
           <div class="col-12 col-md-2">
             <q-select
@@ -60,15 +69,6 @@
               dense
               emit-value
               map-options
-            />
-          </div>
-          <div class="col-12 col-md-4">
-            <q-input
-              v-model="cab.codigo"
-              label="Código (vacío = automático)"
-              outlined
-              dense
-              clearable
             />
           </div>
         </div>
@@ -184,7 +184,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { asientosService, TIPOS_ASIENTO } from '@/services/asientosService.js'
 import { cuentasService } from '@/services/cuentasService.js'
@@ -197,19 +197,36 @@ const tipos = TIPOS_ASIENTO.map(t => ({
   value: t
 }))
 
+function fechaLocalHoy() {
+  const hoy = new Date()
+  hoy.setMinutes(hoy.getMinutes() - hoy.getTimezoneOffset())
+  return hoy.toISOString().slice(0, 10)
+}
+
 const cab = ref({
-  fecha: new Date().toISOString().slice(0, 10),
+  fecha: fechaLocalHoy(),
   concepto: '',
   tipo: 'DIARIO',
   periodo_id: null,
-  sucursal_id: null,
-  codigo: ''
+  sucursal_id: null
 })
 const lineas = ref([
   { cuenta_codigo: null, debe: 0, haber: 0, descripcion: '' },
   { cuenta_codigo: null, debe: 0, haber: 0, descripcion: '' }
 ])
 const periodos = ref([])
+const periodosAbiertos = computed(() => periodos.value.filter(p => p.estado === 'ABIERTO'))
+const periodoSeleccionado = computed(() =>
+  periodos.value.find(p => p.id === cab.value.periodo_id) || null
+)
+const errorFecha = computed(() => {
+  const periodo = periodoSeleccionado.value
+  if (!periodo || !cab.value.fecha) return ''
+  if (cab.value.fecha < periodo.fecha_inicio || cab.value.fecha > periodo.fecha_fin) {
+    return `La fecha no corresponde al período ${periodo.anio}. Elige una entre ${mostrarFecha(periodo.fecha_inicio)} y ${mostrarFecha(periodo.fecha_fin)}.`
+  }
+  return ''
+})
 const sucursales = ref([])
 const hojas = ref([])
 const opcionesCuentas = ref([])
@@ -240,8 +257,28 @@ const puedeGuardar = computed(
     cab.value.periodo_id &&
     lineas.value.length >= 2 &&
     lineasValidas.value &&
+    !errorFecha.value &&
+    periodoSeleccionado.value?.estado === 'ABIERTO' &&
     cuadrado.value &&
     totalDebe.value > 0
+)
+
+function mostrarFecha(fecha) {
+  if (!fecha) return ''
+  const [anio, mes, dia] = String(fecha).slice(0, 10).split('-')
+  return `${dia}/${mes}/${anio}`
+}
+
+watch(
+  () => cab.value.periodo_id,
+  id => {
+    const periodo = periodos.value.find(p => p.id === id)
+    if (!periodo) return
+    if (cab.value.fecha < periodo.fecha_inicio || cab.value.fecha > periodo.fecha_fin) {
+      cab.value.fecha = periodo.fecha_inicio
+    }
+    error.value = ''
+  }
 )
 
 function agregarLinea() {
@@ -274,8 +311,10 @@ async function cargarBase() {
     hojas.value = todas.filter(c => !padres.has(c.codigo))
     periodos.value = perRes.periodos.map(p => ({ ...p, anio: String(p.anio) }))
     sucursales.value = sucRes.sucursales
-    if (periodos.value.length && !cab.value.periodo_id)
-      cab.value.periodo_id = periodos.value[0].id
+    const hoy = fechaLocalHoy()
+    const periodoInicial = periodosAbiertos.value.find(p => p.fecha_inicio <= hoy && hoy <= p.fecha_fin)
+      || periodosAbiertos.value[0]
+    if (periodoInicial) cab.value.periodo_id = periodoInicial.id
     if (sucursales.value.length && !cab.value.sucursal_id)
       cab.value.sucursal_id = sucursales.value[0].id
   } catch (e) {
@@ -286,10 +325,17 @@ async function cargarBase() {
 async function guardar() {
   error.value = ''
   ok.value = ''
+  if (errorFecha.value) {
+    error.value = errorFecha.value
+    return
+  }
+  if (!periodoSeleccionado.value || periodoSeleccionado.value.estado !== 'ABIERTO') {
+    error.value = 'Selecciona un período contable abierto para registrar el asiento.'
+    return
+  }
   guardando.value = true
   try {
     const res = await asientosService.crear({
-      codigo: cab.value.codigo.trim() || undefined,
       fecha: cab.value.fecha,
       concepto: cab.value.concepto.trim(),
       tipo: cab.value.tipo,
@@ -308,7 +354,6 @@ async function guardar() {
       { cuenta_codigo: null, debe: 0, haber: 0, descripcion: '' }
     ]
     cab.value.concepto = ''
-    cab.value.codigo = ''
   } catch (e) {
     error.value = e.message
   } finally {

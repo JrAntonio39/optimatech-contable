@@ -10,11 +10,7 @@
         text-color="grey-8"
         unelevated
         no-caps
-        :options="[
-          { label: 'Aprobaciones', value: 'aprobaciones' },
-          { label: 'Períodos', value: 'periodos' },
-          { label: 'Historial', value: 'historial' }
-        ]"
+        :options="tabsControl"
       />
     </div>
 
@@ -27,12 +23,6 @@
 
     <!-- ================= APROBACIONES ================= -->
     <template v-if="tab === 'aprobaciones'">
-      <q-banner class="bg-blue-1 text-blue-9 q-mb-md" rounded>
-        Los asientos que registra un usuario sin permiso de aprobación quedan en
-        estado <b>PENDIENTE</b> y no suman a los reportes hasta que alguien los
-        apruebe.
-      </q-banner>
-
       <div class="row items-center q-gutter-md q-mb-md">
         <q-chip color="orange-2"> Pendientes: {{ pendientes.length }} </q-chip>
         <q-space />
@@ -90,13 +80,13 @@
                 @click="aprobar(props.row)"
               />
               <q-btn
-                v-if="auth.tienePermiso('asientos.anular')"
+                v-if="auth.tienePermiso('asientos.aprobar')"
                 dense
                 flat
                 color="negative"
-                icon="block"
-                label="Anular"
-                @click="abrirDialogoAnular(props.row)"
+                icon="thumb_down"
+                label="Rechazar"
+                @click="abrirDialogoRechazar(props.row)"
               />
             </q-td>
           </q-tr>
@@ -118,6 +108,7 @@
       </div>
 
       <q-table
+        v-if="auth.tienePermiso('periodos.ver')"
         :rows="periodos"
         :columns="columnasPeriodos"
         row-key="id"
@@ -167,8 +158,9 @@
         </template>
       </q-table>
 
-      <div class="text-subtitle1 q-mt-lg q-mb-sm">Sucursales</div>
+      <div v-if="auth.tienePermiso('sucursales.ver')" class="text-subtitle1 q-mt-lg q-mb-sm">Sucursales</div>
       <q-table
+        v-if="auth.tienePermiso('sucursales.ver')"
         :rows="sucursales"
         :columns="columnasSucursales"
         row-key="id"
@@ -255,54 +247,33 @@
       </q-table>
     </template>
 
-    <!-- ============ DIÁLOGO ANULAR ============ -->
-    <q-dialog v-model="dialogoAnular">
+    <!-- ============ DIÁLOGO RECHAZAR PENDIENTE ============ -->
+    <q-dialog v-model="dialogoRechazar">
       <q-card style="min-width: 420px">
         <q-card-section>
-          <div class="text-h6">Anular asiento</div>
+          <div class="text-h6">Rechazar asiento pendiente</div>
           <div class="text-caption text-grey-7">
-            {{ asientoAnular?.codigo }} — {{ asientoAnular?.concepto }}
+            {{ asientoRechazar?.codigo }} — {{ asientoRechazar?.concepto }}
           </div>
         </q-card-section>
         <q-card-section class="q-gutter-md">
           <q-input
-            v-model="motivoAnulacion"
-            label="Motivo de la anulación"
+            v-model="motivoRechazo"
+            label="Motivo del rechazo"
             type="textarea"
             outlined
             autogrow
             :rules="[v => (v || '').length >= 5 || 'Mínimo 5 caracteres']"
           />
-          <q-select
-            v-model="formAnular.periodo_id"
-            :options="periodosAbiertos"
-            option-value="id"
-            option-label="anio"
-            label="Período de la reversión"
-            outlined
-            dense
-          />
-          <q-input
-            v-model="formAnular.fecha_reversion"
-            type="date"
-            label="Fecha de la reversión"
-            outlined
-            dense
-          />
-          <div class="text-caption text-grey-7">
-            Al anular se genera un asiento de reversión (contra-asiento) por el
-            mismo monto, y el original queda marcado como ANULADO con su motivo.
-            Nada se borra.
-          </div>
         </q-card-section>
         <q-card-actions align="right">
           <q-btn flat label="Cancelar" v-close-popup />
           <q-btn
             color="negative"
-            label="Anular asiento"
+            label="Rechazar asiento"
             :loading="guardando"
-            :disable="motivoAnulacion.length < 5"
-            @click="anular"
+            :disable="motivoRechazo.trim().length < 5"
+            @click="rechazar"
           />
         </q-card-actions>
       </q-card>
@@ -352,13 +323,23 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { controlService } from '@/services/controlService.js'
 import { useAuthStore } from '@/stores/auth.js'
 
 const auth = useAuthStore()
 
-const tab = ref('aprobaciones')
+const tabsControl = computed(() => [
+  ...(auth.tienePermiso('asientos.ver') ? [{ label: 'Aprobaciones', value: 'aprobaciones' }] : []),
+  ...(auth.tienePermiso('periodos.ver') || auth.tienePermiso('sucursales.ver') ? [{ label: 'Períodos', value: 'periodos' }] : []),
+  ...(auth.tienePermiso('auditoria.ver') ? [{ label: 'Historial', value: 'historial' }] : [])
+])
+const tabInicial = auth.tienePermiso('asientos.ver')
+  ? 'aprobaciones'
+  : auth.tienePermiso('periodos.ver') || auth.tienePermiso('sucursales.ver')
+    ? 'periodos'
+    : 'historial'
+const tab = ref(tabInicial)
 const cargando = ref(false)
 const guardando = ref(false)
 const error = ref('')
@@ -369,10 +350,9 @@ const periodos = ref([])
 const sucursales = ref([])
 const auditoria = ref([])
 
-const dialogoAnular = ref(false)
-const asientoAnular = ref(null)
-const motivoAnulacion = ref('')
-const formAnular = ref({ periodo_id: null, fecha_reversion: '' })
+const dialogoRechazar = ref(false)
+const asientoRechazar = ref(null)
+const motivoRechazo = ref('')
 const dialogoPeriodo = ref(false)
 const formPeriodo = ref({
   anio: new Date().getFullYear() + 1,
@@ -403,6 +383,7 @@ const acciones = [
   { label: 'Crear', value: 'crear' },
   { label: 'Editar', value: 'editar' },
   { label: 'Aprobar', value: 'aprobar' },
+  { label: 'Rechazar', value: 'rechazar' },
   { label: 'Anular', value: 'anular' },
   { label: 'Cerrar', value: 'cerrar' },
   { label: 'Eliminar', value: 'eliminar' }
@@ -544,12 +525,10 @@ async function cargarPendientes() {
 async function cargarPeriodos() {
   cargando.value = true
   try {
-    const [per, suc] = await Promise.all([
-      controlService.listarPeriodos(),
-      controlService.listarSucursales()
-    ])
-    periodos.value = per.periodos
-    sucursales.value = suc.sucursales
+    const tareas = []
+    if (auth.tienePermiso('periodos.ver')) tareas.push(controlService.listarPeriodos().then(r => { periodos.value = r.periodos }))
+    if (auth.tienePermiso('sucursales.ver')) tareas.push(controlService.listarSucursales().then(r => { sucursales.value = r.sucursales }))
+    await Promise.all(tareas)
   } catch (e) {
     error.value = e.message
   } finally {
@@ -586,31 +565,20 @@ async function aprobar(asiento) {
   }
 }
 
-function abrirDialogoAnular(asiento) {
-  asientoAnular.value = asiento
-  motivoAnulacion.value = ''
-  const abierto = periodosAbiertos.value[0]
-  formAnular.value = {
-    periodo_id: asiento.periodo_id || abierto?.id || null,
-    fecha_reversion: new Date().toISOString().slice(0, 10)
-  }
-  dialogoAnular.value = true
+function abrirDialogoRechazar(asiento) {
+  asientoRechazar.value = asiento
+  motivoRechazo.value = ''
+  dialogoRechazar.value = true
 }
 
-async function anular() {
+async function rechazar() {
   guardando.value = true
   ok.value = ''
   error.value = ''
   try {
-    const res = await controlService.anular(asientoAnular.value.id, {
-      motivo: motivoAnulacion.value,
-      periodo_id: formAnular.value.periodo_id,
-      fecha_reversion: formAnular.value.fecha_reversion
-    })
-    ok.value = `Asiento ${asientoAnular.value.codigo} anulado. Reversión: ${
-      res?.reversion?.asiento?.codigo || 'creada'
-    }.`
-    dialogoAnular.value = false
+    await controlService.rechazar(asientoRechazar.value.id, motivoRechazo.value.trim())
+    ok.value = `Asiento ${asientoRechazar.value.codigo} rechazado. No se contabilizó ni se generó reversión.`
+    dialogoRechazar.value = false
     await cargarPendientes()
   } catch (e) {
     error.value = e.message
@@ -674,9 +642,12 @@ async function crearPeriodo() {
   }
 }
 
-onMounted(async () => {
-  await cargarPendientes()
-  await cargarPeriodos()
-  await cargarAuditoria()
-})
+async function cargarTabActual() {
+  if (tab.value === 'aprobaciones' && auth.tienePermiso('asientos.ver')) await cargarPendientes()
+  if (tab.value === 'periodos') await cargarPeriodos()
+  if (tab.value === 'historial' && auth.tienePermiso('auditoria.ver')) await cargarAuditoria()
+}
+
+watch(tab, () => cargarTabActual())
+onMounted(() => cargarTabActual())
 </script>

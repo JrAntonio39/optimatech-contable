@@ -30,6 +30,7 @@ ALTER TABLE IF EXISTS ONLY public.planilla DROP CONSTRAINT IF EXISTS planilla_su
 ALTER TABLE IF EXISTS ONLY public.planilla DROP CONSTRAINT IF EXISTS planilla_periodo_id_fkey;
 ALTER TABLE IF EXISTS ONLY public.planilla_detalle DROP CONSTRAINT IF EXISTS planilla_detalle_planilla_id_fkey;
 ALTER TABLE IF EXISTS ONLY public.planilla_detalle DROP CONSTRAINT IF EXISTS planilla_detalle_empleado_id_fkey;
+ALTER TABLE IF EXISTS ONLY public.planilla_detalle DROP CONSTRAINT IF EXISTS planilla_detalle_cuenta_gasto_fkey;
 ALTER TABLE IF EXISTS ONLY public.planilla DROP CONSTRAINT IF EXISTS planilla_creado_por_fkey;
 ALTER TABLE IF EXISTS ONLY public.planilla DROP CONSTRAINT IF EXISTS planilla_asiento_id_fkey;
 ALTER TABLE IF EXISTS ONLY public.planilla DROP CONSTRAINT IF EXISTS planilla_aprobado_por_fkey;
@@ -173,6 +174,7 @@ DROP TABLE IF EXISTS public.factura_detalle;
 DROP TABLE IF EXISTS public.factura;
 DROP SEQUENCE IF EXISTS public.empresa_id_seq;
 DROP TABLE IF EXISTS public.empresa;
+DROP TABLE IF EXISTS public.cargo_empleado;
 DROP SEQUENCE IF EXISTS public.empleado_id_seq;
 DROP TABLE IF EXISTS public.empleado;
 DROP SEQUENCE IF EXISTS public.detalle_asiento_id_seq;
@@ -229,8 +231,11 @@ CREATE TABLE public.asiento (
     anulado_por integer,
     anulado_en timestamp without time zone,
     motivo_anulacion text,
+    motivo_rechazo text,
+    rechazado_por integer,
+    rechazado_en timestamp without time zone,
     reverso_de_id integer,
-    CONSTRAINT asiento_estado_check CHECK (((estado)::text = ANY ((ARRAY['PENDIENTE'::character varying, 'VIGENTE'::character varying, 'ANULADO'::character varying])::text[]))),
+    CONSTRAINT asiento_estado_check CHECK (((estado)::text = ANY ((ARRAY['PENDIENTE'::character varying, 'VIGENTE'::character varying, 'ANULADO'::character varying, 'RECHAZADO'::character varying])::text[]))),
     CONSTRAINT asiento_tipo_check CHECK (((tipo)::text = ANY ((ARRAY['APERTURA'::character varying, 'DIARIO'::character varying, 'AJUSTE'::character varying, 'CIERRE'::character varying])::text[])))
 );
 
@@ -401,7 +406,9 @@ CREATE TABLE public.compra_detalle (
     descripcion text NOT NULL,
     cantidad numeric(10,2) DEFAULT 1 NOT NULL,
     precio_unitario numeric(14,2) NOT NULL,
-    cuenta_activo_codigo character varying(20) NOT NULL
+    cuenta_activo_codigo character varying(20) NOT NULL,
+    tipo_iva character varying(20) DEFAULT 'GRAVADA'::character varying NOT NULL,
+    CONSTRAINT compra_detalle_tipo_iva_check CHECK (((tipo_iva)::text = ANY ((ARRAY['GRAVADA'::character varying, 'EXENTA'::character varying, 'NO_SUJETA'::character varying])::text[])))
 );
 
 
@@ -514,6 +521,32 @@ CREATE TABLE public.empleado (
 
 
 ALTER TABLE public.empleado OWNER TO postgres;
+
+-- Catálogo de puestos de la empresa; empleado.cargo conserva el texto elegido.
+CREATE TABLE public.cargo_empleado (
+    codigo character varying(30) NOT NULL PRIMARY KEY,
+    nombre character varying(100) NOT NULL UNIQUE,
+    activo boolean NOT NULL DEFAULT TRUE,
+    orden smallint NOT NULL DEFAULT 100
+);
+
+INSERT INTO public.cargo_empleado (codigo, nombre, orden) VALUES
+    ('GERENCIA', 'Gerente general', 10),
+    ('ADMINISTRACION', 'Administrador/a de empresa', 20),
+    ('CONTABILIDAD', 'Contador/a', 30),
+    ('ASISTENTE_CONTABLE', 'Asistente contable', 40),
+    ('DESARROLLO', 'Desarrollador/a de software', 50),
+    ('ANALISTA_SISTEMAS', 'Analista de sistemas', 60),
+    ('SOPORTE_TECNICO', 'Técnico/a de soporte', 70),
+    ('REDES_INFRAESTRUCTURA', 'Técnico/a de redes e infraestructura', 80),
+    ('CIBERSEGURIDAD', 'Especialista en ciberseguridad', 90),
+    ('CCTV_BIOMETRIA_POS', 'Técnico/a de CCTV, biometría y POS', 100),
+    ('IMPLEMENTACION', 'Especialista en implementación de sistemas', 110),
+    ('VENTAS', 'Ejecutivo/a de ventas', 120),
+    ('ASESORIA_COMERCIAL', 'Asesor/a comercial', 130),
+    ('MARKETING_DIGITAL', 'Marketing digital', 140),
+    ('AUXILIAR_ADMIN', 'Auxiliar administrativo/a', 150),
+    ('COMPRAS_LOGISTICA', 'Compras y logística', 160);
 
 --
 -- Name: empleado_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
@@ -780,7 +813,10 @@ CREATE TABLE public.planilla_detalle (
     deduccion_isss numeric(14,2) DEFAULT 0,
     deduccion_afp numeric(14,2) DEFAULT 0,
     deduccion_renta numeric(14,2) DEFAULT 0,
-    otras_deducciones numeric(14,2) DEFAULT 0
+    otras_deducciones numeric(14,2) DEFAULT 0,
+    cuenta_gasto_codigo character varying(20) DEFAULT '4.1.3.01'::character varying NOT NULL,
+    isss_patronal numeric(14,2) DEFAULT 0 NOT NULL,
+    afp_patronal numeric(14,2) DEFAULT 0 NOT NULL
 );
 
 
@@ -1090,7 +1126,8 @@ CREATE VIEW public.v_compra_detalle_total AS
     cantidad,
     precio_unitario,
     (cantidad * precio_unitario) AS total_linea,
-    cuenta_activo_codigo
+    cuenta_activo_codigo,
+    tipo_iva
    FROM public.compra_detalle;
 
 
@@ -1104,8 +1141,8 @@ CREATE VIEW public.v_compra_totales AS
  SELECT c.id,
     c.numero,
     COALESCE(sum((cd.cantidad * cd.precio_unitario)), (0)::numeric) AS subtotal,
-    (COALESCE(sum((cd.cantidad * cd.precio_unitario)), (0)::numeric) * 0.13) AS iva,
-    (COALESCE(sum((cd.cantidad * cd.precio_unitario)), (0)::numeric) * 1.13) AS total
+    (COALESCE(sum(CASE WHEN cd.tipo_iva = 'GRAVADA'::character varying THEN (cd.cantidad * cd.precio_unitario) ELSE (0)::numeric END), (0)::numeric) * 0.13) AS iva,
+    (COALESCE(sum((cd.cantidad * cd.precio_unitario)), (0)::numeric) + (COALESCE(sum(CASE WHEN cd.tipo_iva = 'GRAVADA'::character varying THEN (cd.cantidad * cd.precio_unitario) ELSE (0)::numeric END), (0)::numeric) * 0.13)) AS total
    FROM (public.compra c
      LEFT JOIN public.compra_detalle cd ON ((cd.compra_id = c.id)))
   GROUP BY c.id, c.numero;
@@ -1926,7 +1963,7 @@ COPY public.usuario (id, username, email, password_hash, nombre_completo, activo
 9	compras	compras@optimatech.com	$pbkdf2-sha256$29000$ck7J.d87J6Q0BoAwRkip9Q$bxIc3FPm7LNqVJieHdRQh.PnA0r3xBtDVTSX32/aKJg	Compras Demo	t	2026-10-21 20:12:30.304799	\N	\N
 10	planilla	planilla@optimatech.com	$pbkdf2-sha256$29000$pvTeW0spBSCE0FprjZFSqg$kMopLPpisvspp6FRpDRg8fMz6qPaQEVnlUR7NSDNCtg	Planilla Demo	t	2026-10-21 20:12:30.304799	\N	\N
 11	auditor	auditor@optimatech.com	$pbkdf2-sha256$29000$r9V6z7lXCmGsFQIgZEypFQ$5GKbgaUGkCz3EPcVROk.fd9K1weY32xWprbvQNQbCxo	Auditor Demo	t	2026-10-21 20:12:30.304799	\N	\N
-2	admin	admin@optimatech.com	$pbkdf2-sha256$29000$u/e.956TUmoNAaBUam3t/Q$9itiMH0ml3NiATPcyxhEP2eEyOtylyIAcz5UvIRRe7I	Administrador	t	2026-10-20 03:22:18.55509	2026-10-21 21:06:19.378357	\N
+2	admin	admin@optimatech.com	$pbkdf2-sha256$29000$JOQcY0zJ2fsfQ4hxLmUs5Q$k5d1onYcsx9TEC5vMsLEeN0bDc.IRnQzqwWbc972b88	Administrador	t	2026-10-20 03:22:18.55509	2026-10-21 21:06:19.378357	\N
 7	auxiliar	auxiliar@optimatech.com	$pbkdf2-sha256$29000$.H.PUQqB8F7rfY.RsnZOiQ$4SHRclpLxH3AZnValWdOwn4Qc2gePmN1pBrl8bktCcU	Auxiliar Demo	t	2026-10-21 20:12:30.304799	2026-10-21 21:06:19.397401	\N
 6	contador	contador@optimatech.com	$pbkdf2-sha256$29000$u7e2FuIcwxhj7F0rBQDAuA$pxW058pcxOmK1z8WpPqj8pZS0AObP/tdHX/V8RXmeW4	Contador Demo	t	2026-10-21 20:12:30.304799	2026-10-21 21:06:19.40681	\N
 8	ventas	ventas@optimatech.com	$pbkdf2-sha256$29000$U0ppjTFGCAEAwHgvJQTgPA$9QZziPOkxaEWqxBGF0TKgA5c7xJJCtODklDbtGo7A7c	Ventas Demo	t	2026-10-21 20:12:30.304799	2026-10-21 20:52:08.642921	\N
@@ -2769,6 +2806,10 @@ ALTER TABLE ONLY public.planilla_detalle
 
 ALTER TABLE ONLY public.planilla_detalle
     ADD CONSTRAINT planilla_detalle_planilla_id_fkey FOREIGN KEY (planilla_id) REFERENCES public.planilla(id) ON DELETE CASCADE;
+
+-- Name: planilla_detalle planilla_detalle_cuenta_gasto_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+ALTER TABLE ONLY public.planilla_detalle
+    ADD CONSTRAINT planilla_detalle_cuenta_gasto_fkey FOREIGN KEY (cuenta_gasto_codigo) REFERENCES public.catalogo_cuenta(codigo) ON UPDATE CASCADE ON DELETE RESTRICT;
 
 
 --

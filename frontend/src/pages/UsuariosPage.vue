@@ -4,7 +4,7 @@
       <div class="text-h5">Usuarios y roles</div>
       <q-space />
       <q-btn
-        v-if="auth.tienePermiso('usuarios.crear')"
+        v-if="auth.esAdmin"
         color="primary"
         icon="person_add"
         label="Nuevo usuario"
@@ -57,7 +57,7 @@
             </q-td>
             <q-td auto-width>
               <q-btn
-                v-if="auth.tienePermiso('usuarios.editar')"
+                v-if="auth.esAdmin"
                 dense
                 flat
                 icon="edit"
@@ -66,7 +66,7 @@
               />
               <q-btn
                 v-if="
-                  auth.tienePermiso('usuarios.eliminar') && props.row.activo
+                  auth.esAdmin && props.row.activo
                 "
                 dense
                 flat
@@ -97,18 +97,35 @@
         <template #body="props">
           <q-tr :props="props">
             <q-td v-for="col in props.cols" :key="col.name" :props="props">
-              <span v-if="col.name === 'permiso_codigos'">
-                <q-chip
-                  v-for="p in props.row.permiso_codigos"
-                  :key="p"
+              <div v-if="col.name === 'permiso_codigos'" class="permisos-rol">
+                <q-expansion-item
                   dense
-                  outline
-                  color="grey-7"
-                  class="q-mr-xs q-mb-xs"
+                  dense-toggle
+                  expand-separator
+                  icon="verified_user"
+                  :label="`${(props.row.permiso_codigos || []).length} permisos`"
                 >
-                  {{ p }}
-                </q-chip>
-              </span>
+                  <q-list dense class="permisos-rol-lista">
+                    <q-item v-for="grupo in agruparPermisos(props.row.permiso_codigos)" :key="grupo.codigo">
+                      <q-item-section>
+                        <q-item-label class="text-weight-medium">{{ grupo.nombre }}</q-item-label>
+                        <div class="row q-gutter-xs q-mt-xs">
+                          <q-chip
+                            v-for="accion in grupo.acciones"
+                            :key="accion.codigo"
+                            dense
+                            outline
+                            color="primary"
+                            size="sm"
+                          >
+                            {{ accion.nombre }}
+                          </q-chip>
+                        </div>
+                      </q-item-section>
+                    </q-item>
+                  </q-list>
+                </q-expansion-item>
+              </div>
               <span v-else>{{ col.value }}</span>
             </q-td>
           </q-tr>
@@ -215,6 +232,48 @@ const form = ref({
 const opcionesRol = computed(() =>
   roles.value.map(r => ({ label: r.nombre, value: r.codigo }))
 )
+
+const nombresModulos = {
+  asientos: 'Asientos contables',
+  auditoria: 'Auditoría',
+  compras: 'Compras',
+  cuentas: 'Catálogo de cuentas',
+  facturas: 'Facturación',
+  informes: 'Informes',
+  periodos: 'Períodos contables',
+  planilla: 'Pago de salarios',
+  reportes: 'Reportes',
+  sucursales: 'Sucursales',
+  usuarios: 'Usuarios'
+}
+const nombresAcciones = {
+  aprobar: 'Aprobar',
+  anular: 'Anular',
+  cerrar: 'Cerrar',
+  crear: 'Crear',
+  editar: 'Editar',
+  eliminar: 'Eliminar',
+  ver: 'Consultar'
+}
+
+function agruparPermisos(permisos = []) {
+  const grupos = new Map()
+  for (const permiso of permisos) {
+    const [modulo, accion] = String(permiso).split('.', 2)
+    if (!grupos.has(modulo)) {
+      grupos.set(modulo, {
+        codigo: modulo,
+        nombre: nombresModulos[modulo] || modulo,
+        acciones: []
+      })
+    }
+    grupos.get(modulo).acciones.push({
+      codigo: accion || permiso,
+      nombre: nombresAcciones[accion] || accion || permiso
+    })
+  }
+  return [...grupos.values()].sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'))
+}
 
 const columnasUsuarios = [
   { name: 'username', label: 'Usuario', field: 'username', align: 'left' },

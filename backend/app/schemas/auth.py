@@ -10,7 +10,7 @@ class UsuarioBase(BaseModel):
 
 class UsuarioCreate(UsuarioBase):
     password: str = Field(..., min_length=8, max_length=100)
-    rol_codigos: List[str] = []  # lista de códigos de rol a asignar
+    rol_codigos: List[str] = Field(default_factory=list)  # lista de códigos de rol a asignar
 
 class UsuarioUpdate(BaseModel):
     email: Optional[EmailStr] = None
@@ -24,16 +24,12 @@ class UsuarioOut(UsuarioBase):
     activo: bool
     fecha_creacion: datetime
     ultimo_acceso: Optional[datetime]
-    rol_codigos: List[str] = []  # códigos de rol
-    permiso_codigos: List[str] = []  # permisos efectivos del usuario
+    rol_codigos: List[str] = Field(default_factory=list)  # códigos de rol
+    permiso_codigos: List[str] = Field(default_factory=list)  # permisos efectivos del usuario
 
     class Config:
         from_attributes = True
 
-
-class LoginRequest(BaseModel):
-    username: str
-    password: str
 
 class TokenResponse(BaseModel):
     access_token: str
@@ -47,7 +43,7 @@ class RolBase(BaseModel):
     descripcion: Optional[str] = None
 
 class RolCreate(RolBase):
-    permiso_codigos: List[str] = []
+    permiso_codigos: List[str] = Field(default_factory=list)
 
 class RolUpdate(BaseModel):
     nombre: Optional[str] = None

@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import { loginRequest } from '@/services/api.js'
+import { api, loginRequest } from '@/services/api.js'
 
 export const useAuthStore = defineStore('auth', () => {
   const token = ref(sessionStorage.getItem('token') || '')
@@ -49,6 +49,13 @@ export const useAuthStore = defineStore('auth', () => {
     sessionStorage.removeItem('usuario')
   }
 
+  async function actualizarPerfil() {
+    const actual = await api.get('/api/auth/me')
+    usuario.value = actual
+    sessionStorage.setItem('usuario', JSON.stringify(actual))
+    return actual
+  }
+
   function init() {
     const storedToken = sessionStorage.getItem('token')
     const storedUser = sessionStorage.getItem('usuario')
@@ -73,6 +80,7 @@ export const useAuthStore = defineStore('auth', () => {
     tienePermiso,
     tieneAlguno,
     login,
+    actualizarPerfil,
     logout,
     init
   }

@@ -42,15 +42,17 @@ export default defineRouter((/* { store, ssrContext } */) => {
     }
 
     if (to.path === '/login' && token) {
-      return { path: '/catalogo' }
+      return { path: '/' }
     }
 
-    if (to.meta.permiso && token) {
+    if ((to.meta.permiso || to.meta.permisos) && token) {
       try {
         const user = JSON.parse(sessionStorage.getItem('usuario') || 'null')
-        const allowed =
-          user?.rol_codigos?.includes('admin') ||
-          user?.permiso_codigos?.includes(to.meta.permiso)
+        const esAdmin = user?.rol_codigos?.includes('admin')
+        const permisosNecesarios = to.meta.permisos || [to.meta.permiso]
+        const allowed = esAdmin || permisosNecesarios.some(permiso =>
+          user?.permiso_codigos?.includes(permiso)
+        )
         if (!allowed) return { path: '/', query: { sinPermiso: '1' } }
       } catch {
         sessionStorage.removeItem('token')

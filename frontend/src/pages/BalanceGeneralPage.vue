@@ -1,7 +1,14 @@
 <template>
   <q-page padding>
     <div class="row items-center q-mb-md">
-      <div class="text-h5">Balance General</div>
+      <div>
+        <div class="text-h5">Balance General</div>
+        <div v-if="datos.fecha_corte" class="text-caption text-grey-7">
+          Saldos acumulados al {{ fechaFmt(datos.fecha_corte) }}<span v-if="datos.fecha_apertura">
+            · desde la apertura del {{ fechaFmt(datos.fecha_apertura) }}</span
+          ><span v-else> · desde el inicio del historial contabilizado</span>
+        </div>
+      </div>
       <q-badge
         :color="datos.cuadrado ? 'positive' : 'negative'"
         class="q-ml-sm"
@@ -11,8 +18,8 @@
         }}
       </q-badge>
       <q-space />
-      <q-btn flat icon="table_view" label="CSV" @click="exportar" />
-      <q-btn flat icon="picture_as_pdf" label="PDF" @click="imprimirPdf" />
+      <q-btn v-if="auth.tienePermiso('reportes.crear')" flat icon="table_view" label="CSV" @click="exportar" />
+      <q-btn v-if="auth.tienePermiso('reportes.crear')" flat icon="picture_as_pdf" label="PDF" @click="imprimirPdf" />
     </div>
 
     <q-banner v-if="error" class="bg-red-1 text-red q-mb-md" rounded>
@@ -31,7 +38,6 @@
           dense
           emit-value
           map-options
-          clearable
           @update:model-value="cargar"
         />
       </div>
@@ -100,19 +106,23 @@
 </template>
 
 <script setup>
+import { useAuthStore } from '@/stores/auth.js'
 import { ref, onMounted } from 'vue'
 import { reportesService } from '@/services/reportesService.js'
 import { asientosService } from '@/services/asientosService.js'
 import SeccionBalance from '@/components/SeccionBalance.vue'
 import { descargarCsv, imprimirPdf } from '@/utils/exportacion.js'
 
+const auth = useAuthStore()
 const datos = ref({
   activo: { total: 0, rubros: [] },
   pasivo: { total: 0, rubros: [] },
   patrimonio: { total: 0, rubros: [], resultado_ejercicio: 0 },
   total_pasivo_patrimonio: 0,
   cuadrado: true,
-  diferencia: 0
+  diferencia: 0,
+  fecha_corte: null,
+  fecha_apertura: null
 })
 const cargando = ref(false)
 const error = ref('')
@@ -121,6 +131,12 @@ const periodos = ref([])
 
 function fmt(v) {
   return Number(v || 0).toFixed(2)
+}
+
+function fechaFmt(v) {
+  if (!v) return ''
+  const [anio, mes, dia] = String(v).slice(0, 10).split('-')
+  return `${dia}/${mes}/${anio}`
 }
 
 function exportar() {
@@ -175,7 +191,10 @@ async function cargar() {
 onMounted(async () => {
   try {
     const perRes = await asientosService.periodos()
-    periodos.value = perRes.periodos.map(p => ({ ...p, anio: String(p.anio) }))
+    periodos.value = perRes.periodos
+      .map(p => ({ ...p, anio: String(p.anio) }))
+      .sort((a, b) => String(b.fecha_fin).localeCompare(String(a.fecha_fin)))
+    if (periodos.value.length) filtroPeriodo.value = periodos.value[0].id
   } catch (e) {
     error.value = e.message
   }

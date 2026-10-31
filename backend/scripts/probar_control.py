@@ -2,14 +2,14 @@
 Prueba end-to-end del módulo de Control: aprobación, anulación con reversión,
 cierre de período y bitácora de auditoría.
 
-Uso: python3 -m scripts.probar_control
+Uso: OPTIMATECH_ADMIN_PASSWORD='...' python3 -m scripts.probar_control
 """
 
+import os
 import sys
 import requests
 
 BASE = "http://localhost:8000"
-ADMIN = ("admin", "lBd1DzihB1Uao0Nc")
 AUXILIAR = ("auxiliar", "Demo1234")
 CONTADOR = ("contador", "Demo1234")
 
@@ -32,7 +32,12 @@ def main():
     print("PRUEBA END-TO-END: Control, aprobaciones y auditoría")
     print("=" * 70)
 
-    tok_admin = login(*ADMIN)
+    password_admin = os.getenv("OPTIMATECH_ADMIN_PASSWORD")
+    if not password_admin:
+        print("Define OPTIMATECH_ADMIN_PASSWORD con la clave vigente del administrador.")
+        return 1
+
+    tok_admin = login("admin", password_admin)
     tok_aux = login(*AUXILIAR)
     tok_cont = login(*CONTADOR)
     if not all([tok_admin, tok_aux, tok_cont]):

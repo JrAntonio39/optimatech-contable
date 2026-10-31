@@ -1,0 +1,250 @@
+<template>
+  <q-page padding>
+    <div class="row items-center q-mb-md">
+      <div>
+        <div class="text-h5">Clientes</div>
+        <div class="text-caption text-grey-7">Contactos, datos fiscales y cuenta por cobrar</div>
+      </div>
+      <q-space />
+      <q-btn v-if="auth.tienePermiso('facturas.crear')" color="primary" icon="person_add" label="Nuevo cliente" @click="abrirNuevo" />
+    </div>
+
+    <q-banner v-if="error && !dialog" class="bg-red-1 text-red q-mb-md" rounded>{{ error }}</q-banner>
+    <q-banner v-if="mensaje" class="bg-blue-1 text-blue-10 q-mb-md" rounded>{{ mensaje }}</q-banner>
+    <q-card class="opti-card">
+      <q-table :rows="clientesVisibles" :columns="columns" row-key="id" :loading="cargando" :filter="filtro" no-data-label="No hay clientes en esta vista">
+        <template #top-right>
+          <div class="row q-col-gutter-sm">
+            <div class="col-auto"><q-select v-model="filtroEstado" :options="opcionesEstado" dense outlined emit-value map-options label="Estado" style="min-width: 140px" /></div>
+            <div class="col-auto"><q-input v-model="filtro" dense outlined debounce="250" placeholder="Buscar cliente" clearable>
+              <template #prepend><q-icon name="search" /></template>
+            </q-input></div>
+          </div>
+        </template>
+        <template #body-cell-estado="p">
+          <q-td :props="p"><q-badge :color="p.value === 'ACTIVO' ? 'positive' : 'grey'">{{ p.value === 'ACTIVO' ? 'Activo' : 'Inactivo' }}</q-badge></q-td>
+        </template>
+        <template #body-cell-acciones="p">
+          <q-td :props="p" class="text-right">
+            <q-btn v-if="p.row.estado === 'ACTIVO' && auth.tienePermiso('facturas.editar')" flat dense color="primary" icon="edit" label="Editar" @click="abrirEdicion(p.row)" />
+            <q-btn v-if="p.row.estado === 'ACTIVO' && auth.tienePermiso('facturas.eliminar')" flat dense color="negative" icon="person_off" label="Dar de baja" :loading="estadoProcesando === p.row.id" :disable="estadoProcesando !== null" @click="cambiarEstado(p.row, false)" />
+            <q-btn v-if="p.row.estado !== 'ACTIVO' && auth.tienePermiso('facturas.editar')" flat dense color="positive" icon="person_add_alt" label="Reactivar" :loading="estadoProcesando === p.row.id" :disable="estadoProcesando !== null" @click="cambiarEstado(p.row, true)" />
+          </q-td>
+        </template>
+      </q-table>
+    </q-card>
+
+    <q-dialog v-model="dialog" @hide="error = ''">
+      <q-card style="width: 760px; max-width: 96vw">
+        <q-card-section class="row items-center">
+          <div class="text-h6">{{ editando ? 'Editar cliente' : 'Nuevo cliente' }}</div>
+          <q-space /><q-btn v-close-popup flat round icon="close" />
+        </q-card-section>
+        <q-card-section v-if="error" class="q-pt-none"><q-banner class="bg-red-1 text-red" rounded>{{ error }}</q-banner></q-card-section>
+        <q-card-section class="row q-col-gutter-sm">
+          <div class="col-12 col-sm-4"><q-input v-model="form.codigo" label="Código del cliente *" placeholder="Ej.: CLI-003" hint="Opcional: déjalo vacío y se asignará el siguiente código CLI." maxlength="10" outlined dense /></div>
+          <div class="col-12 col-sm-8"><q-input v-model="form.nombre" label="Nombre o razón social *" placeholder="Ej.: Empresa Ejemplo, S.A. de C.V." maxlength="150" outlined dense /></div>
+          <div class="col-12 col-sm-6"><q-input :model-value="form.nit" label="NIT *" placeholder="Ej.: 0614-010199-001-1" maxlength="17" inputmode="numeric" hint="Obligatorio: NIT de 14 dígitos o DUI de 9; los guiones se agregan solos." outlined dense @update:model-value="actualizarNit" /></div>
+          <div class="col-12 col-sm-6"><q-input :model-value="form.nrc" label="NRC *" placeholder="Ej.: 123456-7" maxlength="9" inputmode="numeric" hint="Obligatorio: de 2 a 8 dígitos; se guarda sin guiones." outlined dense @update:model-value="actualizarNrc" /></div>
+          <div class="col-12"><q-input v-model="form.giro" label="Giro o actividad económica *" placeholder="Ej.: Venta de equipos informáticos y soporte técnico" maxlength="250" outlined dense /></div>
+          <div class="col-12"><q-input v-model="form.direccion" label="Dirección *" placeholder="Ej.: Colonia Escalón, San Salvador" maxlength="250" outlined dense /></div>
+          <div class="col-12 col-sm-6"><q-input :model-value="form.telefono" type="tel" label="Teléfono" placeholder="2222-3333" maxlength="15" hint="Opcional: 8 dígitos; agrega +503 si incluyes el código de país." outlined dense @update:model-value="actualizarTelefono" /></div>
+          <div class="col-12 col-sm-6"><q-input v-model="form.email" type="email" label="Correo" placeholder="compras@empresa.com" maxlength="100" outlined dense /></div>
+          <div class="col-12"><q-select v-model="form.cuenta_codigo" :options="cuentasCobrar" option-value="codigo" :option-label="c => `${c.codigo} · ${c.nombre}`" emit-value map-options label="Cuenta por cobrar" outlined dense /></div>
+        </q-card-section>
+        <q-card-actions align="right">
+          <q-btn flat label="Cancelar" v-close-popup />
+          <q-btn color="primary" :label="editando ? 'Guardar cambios' : 'Guardar cliente'" :loading="guardando" @click="guardar" />
+        </q-card-actions>
+      </q-card>
+    </q-dialog>
+  </q-page>
+</template>
+
+<script setup>
+import { computed, onMounted, ref } from 'vue'
+import { useQuasar } from 'quasar'
+import { useAuthStore } from '@/stores/auth.js'
+import { api } from '@/services/api.js'
+
+const $q = useQuasar()
+const auth = useAuthStore()
+const clientes = ref([])
+const cuentasCobrar = ref([])
+const filtro = ref('')
+const filtroEstado = ref('ACTIVO')
+const cargando = ref(false)
+const guardando = ref(false)
+const estadoProcesando = ref(null)
+const dialog = ref(false)
+const editando = ref(false)
+const clienteId = ref(null)
+const error = ref('')
+const mensaje = ref('')
+const nuevo = () => ({ codigo: '', nombre: '', nit: '', nrc: '', giro: '', direccion: '', telefono: '', email: '', cuenta_codigo: '' })
+const form = ref(nuevo())
+const opcionesEstado = [
+  { label: 'Activos', value: 'ACTIVO' },
+  { label: 'Inactivos', value: 'INACTIVO' },
+  { label: 'Todos', value: 'TODOS' }
+]
+const clientesVisibles = computed(() => filtroEstado.value === 'TODOS' ? clientes.value : clientes.value.filter(customer => customer.estado === filtroEstado.value))
+const columns = [
+  { name: 'codigo', label: 'Código', field: 'codigo', align: 'left', sortable: true },
+  { name: 'nombre', label: 'Nombre / razón social', field: 'nombre', align: 'left', sortable: true },
+  { name: 'nit', label: 'NIT', field: r => formatearNit(r.nit) },
+  { name: 'nrc', label: 'NRC', field: r => formatearNrc(r.nrc) },
+  { name: 'giro', label: 'Giro / actividad', field: r => r.giro || '—', align: 'left' },
+  { name: 'telefono', label: 'Teléfono', field: r => formatearTelefono(r.telefono) },
+  { name: 'estado', label: 'Estado', field: 'estado' },
+  { name: 'acciones', label: 'Acciones', field: 'id', align: 'right' }
+]
+
+async function cargar() {
+  cargando.value = true
+  error.value = ''
+  try {
+    const [c, a] = await Promise.all([api.get('/api/clientes'), api.get('/api/cuentas?q=1.1.3.')])
+    clientes.value = c.clientes
+    const parents = new Set(a.cuentas.map(account => account.codigo_padre))
+    cuentasCobrar.value = a.cuentas.filter(account => account.codigo.startsWith('1.1.3.') && !parents.has(account.codigo))
+  } catch (err) {
+    error.value = err.message
+  } finally {
+    cargando.value = false
+  }
+}
+
+function abrirNuevo() {
+  error.value = ''
+  mensaje.value = ''
+  form.value = nuevo()
+  form.value.cuenta_codigo = cuentasCobrar.value.find(account => account.codigo === '1.1.3.01.02')?.codigo || cuentasCobrar.value[0]?.codigo || ''
+  editando.value = false
+  clienteId.value = null
+  dialog.value = true
+}
+
+function abrirEdicion(row) {
+  error.value = ''
+  mensaje.value = ''
+  editando.value = true
+  clienteId.value = row.id
+  form.value = { codigo: row.codigo, nombre: row.nombre, nit: row.nit || '', nrc: row.nrc || '', giro: row.giro || '', direccion: row.direccion || '', telefono: row.telefono || '', email: row.email || '', cuenta_codigo: row.cuenta_codigo || '' }
+  actualizarNit(row.nit || '')
+  actualizarNrc(row.nrc || '')
+  actualizarTelefono(row.telefono || '')
+  dialog.value = true
+}
+
+function actualizarNit(value) {
+  const digits = String(value || '').replace(/\D/g, '').slice(0, 14)
+  if (digits.length <= 8) form.value.nit = digits
+  else if (digits.length === 9) form.value.nit = `${digits.slice(0, 8)}-${digits.slice(8)}`
+  else form.value.nit = `${digits.slice(0, 4)}-${digits.slice(4, 10)}${digits.length > 10 ? `-${digits.slice(10, 13)}` : ''}${digits.length > 13 ? `-${digits.slice(13, 14)}` : ''}`
+}
+
+function formatearNit(value) {
+  if (!value) return '—'
+  const digits = String(value).replace(/\D/g, '')
+  if (digits.length === 9) return `${digits.slice(0, 8)}-${digits.slice(8)}`
+  if (digits.length === 14) return `${digits.slice(0, 4)}-${digits.slice(4, 10)}-${digits.slice(10, 13)}-${digits.slice(13)}`
+  return String(value)
+}
+
+function actualizarNrc(value) {
+  const digits = String(value || '').replace(/\D/g, '').slice(0, 8)
+  form.value.nrc = digits.length > 6 ? `${digits.slice(0, 6)}-${digits.slice(6)}` : digits
+}
+
+function formatearNrc(value) {
+  if (!value) return '—'
+  const digits = String(value).replace(/\D/g, '')
+  return digits.length > 6 ? `${digits.slice(0, 6)}-${digits.slice(6)}` : digits
+}
+
+function actualizarTelefono(value) {
+  const raw = String(value || '').trim()
+  const internacional = raw.startsWith('+')
+  let digits = raw.replace(/\D/g, '')
+  if (internacional && digits.startsWith('503')) digits = digits.slice(3)
+  digits = digits.slice(0, 8)
+  const local = digits.length > 4 ? `${digits.slice(0, 4)}-${digits.slice(4)}` : digits
+  form.value.telefono = internacional ? `+503 ${local}`.trimEnd() : local
+}
+
+function formatearTelefono(value) {
+  if (!value) return '—'
+  const raw = String(value)
+  const internacional = raw.startsWith('+')
+  let digits = raw.replace(/\D/g, '')
+  if (internacional && digits.startsWith('503')) digits = digits.slice(3)
+  const local = digits.length > 4 ? `${digits.slice(0, 4)}-${digits.slice(4, 8)}` : digits
+  return internacional ? `+503 ${local}` : local
+}
+
+function validarYNormalizar() {
+  const codigo = String(form.value.codigo || '').trim().toUpperCase()
+  const nombre = String(form.value.nombre || '').trim()
+  const nit = String(form.value.nit || '').trim()
+  const nrc = String(form.value.nrc || '').trim()
+  const giro = String(form.value.giro || '').trim()
+  const direccion = String(form.value.direccion || '').trim()
+  const telefono = String(form.value.telefono || '').trim()
+  const telefonoDigits = telefono.replace(/\D/g, '')
+  const email = String(form.value.email || '').trim().toLowerCase()
+  if (codigo && !/^CLI-\d{3,6}$/.test(codigo)) { error.value = 'El código debe tener el formato CLI-003, con 3 a 6 dígitos; también puedes dejarlo vacío para generarlo.'; return null }
+  if (nombre.length < 2 || nombre.length > 150) { error.value = 'Escribe el nombre o razón social del cliente (de 2 a 150 caracteres).'; return null }
+  if (!/^(?:\d{9}|\d{14}|\d{8}-\d|\d{4}-\d{6}-\d{3}-\d)$/.test(nit)) { error.value = 'El NIT es obligatorio: escribe 9 dígitos (formato DUI) o 14. Ejemplo: 0614-010199-001-1.'; return null }
+  if (!/^(?:\d{2,8}|\d{2,7}-\d)$/.test(nrc)) { error.value = 'El NRC es obligatorio y debe tener de 2 a 8 dígitos. Ejemplo: 123456-7.'; return null }
+  if (giro.length < 3 || !/[a-záéíóúñ]/i.test(giro)) { error.value = 'Escribe la actividad económica registrada del cliente (al menos 3 caracteres).'; return null }
+  if (direccion.length < 5) { error.value = 'La dirección es obligatoria y debe tener al menos 5 caracteres.'; return null }
+  if (telefono && (!/^[+0-9()\-\s]+$/.test(telefono) || ![8, 11].includes(telefonoDigits.length) || (telefonoDigits.length === 11 && !telefonoDigits.startsWith('503')))) { error.value = 'El teléfono debe tener 8 dígitos, o 11 si comienza con 503.'; return null }
+  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { error.value = 'El correo debe tener un formato como compras@empresa.com.'; return null }
+  if (!form.value.cuenta_codigo) { error.value = 'Selecciona la cuenta por cobrar del cliente.'; return null }
+  return { ...form.value, codigo: codigo || null, nombre, nit: nit.replace(/[-\s]/g, ''), nrc: nrc.replace(/-/g, ''), giro, direccion, telefono: telefono ? (telefonoDigits.length === 11 ? `+${telefonoDigits}` : telefonoDigits) : null, email: email || null }
+}
+
+async function guardar() {
+  error.value = ''
+  const payload = validarYNormalizar()
+  if (!payload) return
+  guardando.value = true
+  try {
+    const result = editando.value
+      ? await api.put(`/api/clientes/${clienteId.value}`, payload)
+      : await api.post('/api/clientes', payload)
+    dialog.value = false
+    mensaje.value = editando.value ? 'Datos del cliente actualizados.' : `Cliente ${result.codigo} creado.`
+    await cargar()
+  } catch (err) {
+    error.value = err.message
+  } finally {
+    guardando.value = false
+  }
+}
+
+function cambiarEstado(row, activar) {
+  const accion = activar ? 'reactivar' : 'dar de baja'
+  $q.dialog({ title: `${activar ? 'Reactivar' : 'Dar de baja'} cliente`, message: `¿Deseas ${accion} a ${row.nombre}? ${activar ? 'Volverá a estar disponible para nuevas facturas.' : 'No aparecerá en nuevas facturas; su historial se conservará.'}`, cancel: true, persistent: true })
+    .onOk(() => { void ejecutarCambioEstado(row, activar) })
+}
+
+async function ejecutarCambioEstado(row, activar) {
+  error.value = ''
+  mensaje.value = ''
+  estadoProcesando.value = row.id
+  try {
+    if (activar) await api.post(`/api/clientes/${row.id}/activar`, {})
+    else await api.del(`/api/clientes/${row.id}`)
+    await cargar()
+    mensaje.value = activar ? `${row.nombre} fue reactivado.` : `${row.nombre} fue dado de baja. Sus facturas anteriores se conservaron.`
+  } catch (err) {
+    error.value = err.message || `No se pudo ${activar ? 'reactivar' : 'dar de baja'} al cliente.`
+  } finally {
+    estadoProcesando.value = null
+  }
+}
+
+onMounted(cargar)
+</script>

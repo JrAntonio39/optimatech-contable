@@ -1,14 +1,14 @@
-from fastapi import APIRouter, Depends, Query, HTTPException
-from pydantic import BaseModel, Field
+from fastapi import APIRouter, Depends, Query, HTTPException, Response
+from pydantic import BaseModel, ConfigDict, Field
 from typing import Optional
 from datetime import date, datetime
 from sqlalchemy.orm import Session
 from sqlalchemy import text
+from sqlalchemy.exc import IntegrityError
 from app.database import get_db
 from app.models.auth import Usuario
 from app.routers.auth import require_permission
 from app.services.auditoria import registrar
-from app.audit import registrar_evento
 
 router = APIRouter(prefix="/api/asientos", tags=["Asientos"])
 
@@ -23,7 +23,8 @@ class LineaIn(BaseModel):
 
 
 class AsientoCreate(BaseModel):
-    codigo: Optional[str] = Field(None, max_length=20, description="Si se omite se genera AST-ANIO-0001")
+    model_config = ConfigDict(extra="forbid")
+
     fecha: date
     concepto: str = Field(..., min_length=3)
     tipo: str = Field("DIARIO")
@@ -51,21 +52,28 @@ def listar_asientos(
     tipo: str = Query(None, description="APERTURA | DIARIO | AJUSTE | CIERRE"),
     periodo_id: int = Query(None),
     sucursal_id: int = Query(None),
-    estado: str = Query(None, description="PENDIENTE | VIGENTE | ANULADO"),
+    estado: str = Query(None, description="PENDIENTE | VIGENTE | ANULADO | RECHAZADO"),
+    asiento_id: int = Query(None),
     desde: date = Query(None),
     hasta: date = Query(None),
 ):
     query = """
-        SELECT a.id, a.codigo, a.fecha, a.concepto, a.tipo, a.periodo_id, a.sucursal_id, a.estado,
+        SELECT a.id, a.codigo, a.fecha, a.concepto, a.tipo, a.periodo_id,
+               p.anio AS periodo_anio, p.estado AS periodo_estado, a.sucursal_id, a.estado,
                COALESCE(SUM(d.debe),0) AS total_debe, COALESCE(SUM(d.haber),0) AS total_haber
-        FROM asiento a LEFT JOIN detalle_asiento d ON d.asiento_id = a.id
+        FROM asiento a
+        JOIN periodo_contable p ON p.id = a.periodo_id
+        LEFT JOIN detalle_asiento d ON d.asiento_id = a.id
     """
     conds, params = [], {}
     if estado:
-        if estado not in ("PENDIENTE", "VIGENTE", "ANULADO"):
+        if estado not in ("PENDIENTE", "VIGENTE", "ANULADO", "RECHAZADO"):
             raise HTTPException(400, "Estado inválido")
         conds.append("a.estado = :estado")
         params["estado"] = estado
+    if asiento_id:
+        conds.append("a.id = :asiento_id")
+        params["asiento_id"] = asiento_id
     if tipo:
         if tipo not in TIPOS:
             raise HTTPException(400, f"Tipo inválido. Use: {', '.join(TIPOS)}")
@@ -87,7 +95,7 @@ def listar_asientos(
         params["hasta"] = hasta
     if conds:
         query += " WHERE " + " AND ".join(conds)
-    query += " GROUP BY a.id ORDER BY a.fecha, a.id"
+    query += " GROUP BY a.id, p.anio, p.estado ORDER BY a.fecha, a.id"
     rows = db.execute(text(query), params).mappings().all()
     out = []
     for r in rows:
@@ -162,6 +170,50 @@ def detalle_asiento(
             "estado_partida": "CUADRADO" if debe == haber else "DESCUADRADO"}
 
 
+@router.delete("/{asiento_id}", status_code=204, summary="Eliminar un asiento pendiente")
+def eliminar_asiento(
+    asiento_id: int,
+    db: Session = Depends(get_db),
+    user: Usuario = Depends(require_permission("asientos", "eliminar")),
+):
+    asiento = db.execute(
+        text("SELECT * FROM asiento WHERE id=:id FOR UPDATE"), {"id": asiento_id}
+    ).mappings().first()
+    if not asiento:
+        raise HTTPException(404, "Asiento no encontrado")
+    if asiento["estado"] != "PENDIENTE":
+        raise HTTPException(409, "Solo se pueden eliminar asientos pendientes; los contabilizados se corrigen mediante anulación.")
+
+    # Asientos creados desde facturas, compras o planillas se gestionan desde su módulo.
+    for tabla, etiqueta in (("factura", "factura"), ("compra", "compra"), ("planilla", "planilla")):
+        if db.execute(text(f"SELECT 1 FROM {tabla} WHERE asiento_id=:id LIMIT 1"), {"id": asiento_id}).first():
+            raise HTTPException(409, f"Este asiento pertenece a una {etiqueta}; elimínala o corrígela desde su módulo.")
+    if db.execute(text("SELECT to_regclass('public.planilla_pago')")).scalar() and db.execute(
+        text("SELECT 1 FROM planilla_pago WHERE asiento_id=:id LIMIT 1"), {"id": asiento_id}
+    ).first():
+        raise HTTPException(409, "Este asiento pertenece a un pago de planilla y no se puede eliminar desde el libro diario.")
+
+    lineas = db.execute(
+        text("SELECT cuenta_codigo, debe, haber, descripcion FROM detalle_asiento WHERE asiento_id=:id ORDER BY id"),
+        {"id": asiento_id},
+    ).mappings().all()
+    try:
+        registrar(
+            db, user, "asientos", "asiento", "eliminar",
+            registro_id=asiento_id, registro_codigo=asiento["codigo"],
+            datos_antes={"asiento": dict(asiento), "detalles": [dict(linea) for linea in lineas]},
+        )
+        db.execute(text("DELETE FROM asiento WHERE id=:id"), {"id": asiento_id})
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(409, "No se puede eliminar el asiento porque otra operación lo está utilizando.")
+    except Exception:
+        db.rollback()
+        raise
+    return Response(status_code=204)
+
+
 @router.post("", status_code=201, summary="Registrar un asiento (valida partida doble)")
 def crear_asiento(
     data: AsientoCreate,
@@ -210,14 +262,8 @@ def crear_asiento(
     if debe == 0:
         raise HTTPException(400, "El asiento no puede ser de valor cero")
 
-    codigo = (data.codigo or "").strip()
-    if codigo:
-        dup = db.execute(text("SELECT 1 FROM asiento WHERE codigo=:c"), {"c": codigo}).first()
-        if dup:
-            raise HTTPException(409, f"El código {codigo} ya existe")
-    else:
-        nxt = db.execute(text("SELECT COALESCE(MAX(id),0)+1 AS n FROM asiento")).mappings().first()["n"]
-        codigo = f"AST-{per['anio']}-{int(nxt):04d}"
+    nxt = db.execute(text("SELECT COALESCE(MAX(id),0)+1 AS n FROM asiento")).mappings().first()["n"]
+    codigo = f"AST-{per['anio']}-{int(nxt):04d}"
 
     try:
         res = db.execute(
@@ -230,13 +276,10 @@ def crear_asiento(
                 text("INSERT INTO detalle_asiento (asiento_id, cuenta_codigo, debe, haber, descripcion) VALUES (:a,:c,:d,:h,:desc)"),
                 {"a": nuevo_id, "c": lin.cuenta_codigo, "d": float(lin.debe or 0), "h": float(lin.haber or 0), "desc": lin.descripcion},
             )
-        registrar_evento(
-            db,
-            actor_id=user.id,
-            accion="CREAR",
-            entidad="asiento",
-            entidad_id=nuevo_id,
-            despues={"codigo": codigo, "estado": "PENDIENTE", "debe": debe, "haber": haber},
+        registrar(
+            db, user, "asientos", "asiento", "crear", registro_id=nuevo_id,
+            registro_codigo=codigo,
+            datos_despues={"codigo": codigo, "estado": "PENDIENTE", "debe": debe, "haber": haber},
         )
         db.commit()
     except HTTPException:
@@ -275,9 +318,117 @@ def aprobar_asiento(
         text("UPDATE asiento SET estado='VIGENTE', aprobado_por=:u, aprobado_en=:now WHERE id=:id"),
         {"u": user.id, "now": datetime.utcnow(), "id": asiento_id},
     )
-    registrar_evento(db, actor_id=user.id, accion="APROBAR", entidad="asiento", entidad_id=asiento_id, antes={"estado": "PENDIENTE"}, despues={"estado": "VIGENTE", "codigo": row["codigo"]})
+    # Sincroniza el documento auxiliar que originó el asiento.
+    for table, state, module, code_column in (
+        ("factura", "VIGENTE", "facturas", "numero"),
+        ("compra", "VIGENTE", "compras", "numero"),
+        ("planilla", "CONTABILIZADA", "planilla", "codigo"),
+    ):
+        source = db.execute(
+            text(f"SELECT id,{code_column} AS codigo,estado FROM {table} WHERE asiento_id=:id AND estado IN ('PENDIENTE','APROBADA') FOR UPDATE"),
+            {"id": asiento_id},
+        ).mappings().first()
+        if source:
+            db.execute(text(f"UPDATE {table} SET estado=:estado WHERE id=:id"), {"estado": state, "id": source["id"]})
+            registrar(db, user, module, table, "contabilizar", registro_id=source["id"],
+                      registro_codigo=source["codigo"], datos_antes={"estado": source["estado"]},
+                      datos_despues={"estado": state, "asiento_id": asiento_id})
+    # La tabla de pagos se agrega con la migración opcional 003; la aprobación
+    # de asientos manuales debe seguir funcionando si esa migración no existe.
+    payment = None
+    if db.execute(text("SELECT to_regclass('public.planilla_pago')")).scalar():
+        payment = db.execute(
+            text("SELECT id,planilla_id,monto,estado FROM planilla_pago WHERE asiento_id=:id FOR UPDATE"),
+            {"id": asiento_id},
+        ).mappings().first()
+    if payment:
+        db.execute(text("UPDATE planilla_pago SET estado='PAGADA' WHERE id=:id"), {"id": payment["id"]})
+        db.execute(text("UPDATE planilla SET estado='PAGADA' WHERE id=:id AND estado='CONTABILIZADA'"), {"id": payment["planilla_id"]})
+        registrar(db, user, "planilla", "planilla_pago", "pagar", registro_id=payment["planilla_id"],
+                  datos_antes={"estado": payment["estado"]},
+                  datos_despues={"estado": "PAGADA", "monto": str(payment["monto"]), "asiento_id": asiento_id})
+    registrar(db, user, "asientos", "asiento", "aprobar", registro_id=asiento_id,
+              registro_codigo=row["codigo"], descripcion=f"Aprobó el asiento {row['codigo']}",
+              datos_antes={"estado": "PENDIENTE"}, datos_despues={"estado": "VIGENTE", "codigo": row["codigo"]})
     db.commit()
     return detalle_asiento(asiento_id, db)
+
+
+class RechazoIn(BaseModel):
+    motivo: str = Field(..., min_length=5, max_length=500)
+
+
+@router.post("/{asiento_id}/rechazar", summary="Rechazar un asiento pendiente")
+def rechazar_asiento(
+    asiento_id: int,
+    data: RechazoIn,
+    db: Session = Depends(get_db),
+    user: Usuario = Depends(require_permission("asientos", "aprobar")),
+):
+    original = db.execute(
+        text("SELECT id,codigo,concepto,estado FROM asiento WHERE id=:id FOR UPDATE"),
+        {"id": asiento_id},
+    ).mappings().first()
+    if not original:
+        raise HTTPException(404, "Asiento no encontrado")
+    if original["estado"] != "PENDIENTE":
+        raise HTTPException(409, "Solo se pueden rechazar asientos pendientes; los vigentes se anulan con una reversión")
+
+    motivo = data.motivo.strip()
+    if len(motivo) < 5:
+        raise HTTPException(400, "Escriba un motivo de rechazo de al menos 5 caracteres")
+    try:
+        payment = None
+        if db.execute(text("SELECT to_regclass('public.planilla_pago')")).scalar():
+            payment = db.execute(
+                text("SELECT id,planilla_id,monto,estado FROM planilla_pago WHERE asiento_id=:id FOR UPDATE"),
+                {"id": asiento_id},
+            ).mappings().first()
+
+        if payment:
+            db.execute(text("UPDATE planilla_pago SET estado='CANCELADA' WHERE id=:id"), {"id": payment["id"]})
+            registrar(db, user, "planilla", "planilla_pago", "rechazar", registro_id=payment["planilla_id"],
+                      datos_antes={"estado": payment["estado"]},
+                      datos_despues={"estado": "CANCELADA", "asiento_id": asiento_id, "motivo": motivo})
+        else:
+            source = db.execute(
+                text("SELECT id,codigo,estado FROM planilla WHERE asiento_id=:id AND estado='APROBADA' FOR UPDATE"),
+                {"id": asiento_id},
+            ).mappings().first()
+            if source:
+                db.execute(text("UPDATE planilla SET estado='BORRADOR',asiento_id=NULL,aprobado_por=NULL,aprobado_en=NULL WHERE id=:id"),
+                           {"id": source["id"]})
+                registrar(db, user, "planilla", "planilla", "rechazar_asiento", registro_id=source["id"],
+                          registro_codigo=source["codigo"], datos_antes={"estado": "APROBADA"},
+                          datos_despues={"estado": "BORRADOR", "motivo": motivo})
+            else:
+                for table, code_column, module in (("factura", "numero", "facturas"), ("compra", "numero", "compras")):
+                    document = db.execute(
+                        text(f"SELECT id,{code_column} AS codigo,estado FROM {table} WHERE asiento_id=:id AND estado='PENDIENTE' FOR UPDATE"),
+                        {"id": asiento_id},
+                    ).mappings().first()
+                    if document:
+                        db.execute(text(f"UPDATE {table} SET estado='ANULADA',motivo_anulacion=:motivo WHERE id=:id"),
+                                   {"id": document["id"], "motivo": motivo})
+                        registrar(db, user, module, table, "rechazar_asiento", registro_id=document["id"],
+                                  registro_codigo=document["codigo"], datos_antes={"estado": "PENDIENTE"},
+                                  datos_despues={"estado": "ANULADA", "motivo": motivo})
+                        break
+
+        db.execute(
+            text("UPDATE asiento SET estado='RECHAZADO',motivo_rechazo=:motivo,rechazado_por=:user,rechazado_en=:now WHERE id=:id"),
+            {"motivo": motivo, "user": user.id, "now": datetime.utcnow(), "id": asiento_id},
+        )
+        registrar(db, user, "asientos", "asiento", "rechazar", registro_id=asiento_id,
+                  registro_codigo=original["codigo"], descripcion=motivo,
+                  datos_antes={"estado": "PENDIENTE"}, datos_despues={"estado": "RECHAZADO", "motivo": motivo})
+        db.commit()
+    except Exception as exc:
+        db.rollback()
+        if isinstance(exc, HTTPException):
+            raise
+        raise HTTPException(500, f"No se pudo rechazar el asiento: {exc}")
+    return {"id": asiento_id, "codigo": original["codigo"], "estado": "RECHAZADO", "motivo": motivo}
 
 
 @router.post("/{asiento_id}/anular", summary="Anular asiento con contrapartida y motivo")
@@ -332,11 +483,13 @@ def anular_asiento(
             text("UPDATE asiento SET estado='ANULADO', anulado_por=:u, anulado_en=:now, motivo_anulacion=:motivo WHERE id=:id"),
             {"u": user.id, "now": datetime.utcnow(), "motivo": data.motivo.strip(), "id": asiento_id},
         )
-        registrar_evento(db, actor_id=user.id, accion="ANULAR", entidad="asiento", entidad_id=asiento_id,
-                         motivo=data.motivo.strip(), antes={"estado": "VIGENTE", "codigo": original["codigo"]},
-                         despues={"estado": "ANULADO", "reverso_id": reversal_id, "reverso_codigo": codigo})
-        registrar_evento(db, actor_id=user.id, accion="REVERSAR", entidad="asiento", entidad_id=reversal_id,
-                         motivo=data.motivo.strip(), despues={"estado": "VIGENTE", "reverso_de_id": asiento_id, "codigo": codigo})
+        registrar(db, user, "asientos", "asiento", "anular", registro_id=asiento_id,
+                  registro_codigo=original["codigo"], descripcion=data.motivo.strip(),
+                  datos_antes={"estado": "VIGENTE", "codigo": original["codigo"]},
+                  datos_despues={"estado": "ANULADO", "reverso_id": reversal_id, "reverso_codigo": codigo})
+        registrar(db, user, "asientos", "asiento", "reversar", registro_id=reversal_id,
+                  registro_codigo=codigo, descripcion=data.motivo.strip(),
+                  datos_despues={"estado": "VIGENTE", "reverso_de_id": asiento_id, "codigo": codigo})
         db.commit()
     except HTTPException:
         db.rollback()

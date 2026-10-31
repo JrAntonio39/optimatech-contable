@@ -20,6 +20,9 @@ export const cuentasService = {
   /** Detalle de una cuenta + sus hijas. Ej: '1.1.1' */
   detalle: codigo => api.get(`/api/cuentas/${encodeURIComponent(codigo)}`),
 
-  /** Crear cuenta (PENDIENTE: implementar POST /api/cuentas en el backend). */
-  crear: data => api.post('/api/cuentas', data)
+  /** Crea una subcuenta; el backend genera el código desde la cuenta padre. */
+  crear: data => api.post('/api/cuentas', data),
+
+  /** Elimina una cuenta solo si no tiene subcuentas ni referencias. */
+  eliminar: codigo => api.del(`/api/cuentas/${encodeURIComponent(codigo)}`)
 }
