@@ -284,7 +284,9 @@ async function eliminarBorrador(){
   finally{eliminando.value=null}
 }
 async function refrescarFacturas(){
-  if(document.visibilityState!=='visible'||cargando.value||actualizandoLista.value||guardando.value||enviando.value!==null||eliminando.value!==null||dialog.value||dialogEliminar.value)return
+  // Actualizar la tabla no modifica el formulario; mantener la sincronización
+  // activa aunque el usuario esté preparando otra factura.
+  if(document.visibilityState!=='visible'||cargando.value||actualizandoLista.value||guardando.value||enviando.value!==null||eliminando.value!==null)return
   const secuencia=++secuenciaConsultaFacturas
   try{const result=await operacionesService.facturas();if(secuencia===secuenciaConsultaFacturas)facturas.value=normalizarFacturas(result.facturas)}catch(e){if(secuencia===secuenciaConsultaFacturas)error.value=e.message}
 }
@@ -294,13 +296,15 @@ async function actualizarLista(){
   try{const result=await operacionesService.facturas();if(secuencia===secuenciaConsultaFacturas)facturas.value=normalizarFacturas(result.facturas)}catch(e){if(secuencia===secuenciaConsultaFacturas)error.value=e.message}finally{if(secuencia===secuenciaConsultaFacturas)actualizandoLista.value=false}
 }
 function refrescarAlVolver(){if(document.visibilityState==='visible')refrescarFacturas()}
+function refrescarAlRestaurar(){refrescarFacturas()}
 onMounted(()=>{
   cargar()
   refreshFacturasTimer=window.setInterval(refrescarFacturas,5000)
   window.addEventListener('focus',refrescarAlVolver)
+  window.addEventListener('pageshow',refrescarAlRestaurar)
   document.addEventListener('visibilitychange',refrescarAlVolver)
 })
-onUnmounted(()=>{if(refreshFacturasTimer)window.clearInterval(refreshFacturasTimer);window.removeEventListener('focus',refrescarAlVolver);document.removeEventListener('visibilitychange',refrescarAlVolver)})
+onUnmounted(()=>{if(refreshFacturasTimer)window.clearInterval(refreshFacturasTimer);window.removeEventListener('focus',refrescarAlVolver);window.removeEventListener('pageshow',refrescarAlRestaurar);document.removeEventListener('visibilitychange',refrescarAlVolver)})
 </script>
 
 <style>
