@@ -777,12 +777,19 @@ def activate_supplier(proveedor_id:int,db:Session=Depends(get_db),user:Usuario=D
 
 @router.get("/compras")
 def purchases(db:Session=Depends(get_db),user:Usuario=Depends(require_permission("compras","ver"))):
-    rows=db.execute(text("""SELECT c.id,c.numero,c.tipo_doc,c.fecha,c.proveedor_id,p.nombre proveedor,c.sucursal_id,c.periodo_id,c.estado,c.asiento_id,
+    rows=db.execute(text("""SELECT c.id,c.numero,c.tipo_doc,c.fecha,c.proveedor_id,p.nombre proveedor,c.sucursal_id,c.periodo_id,
+      CASE WHEN a.estado='VIGENTE' THEN 'VIGENTE'
+           WHEN a.estado='PENDIENTE' THEN 'PENDIENTE'
+           WHEN a.estado='RECHAZADO' THEN 'RECHAZADO'
+           WHEN a.estado='ANULADO' THEN 'ANULADA'
+           ELSE c.estado END AS estado,
+      c.asiento_id,
       COALESCE(SUM(d.cantidad*d.precio_unitario),0) subtotal,
       ROUND(COALESCE(SUM(CASE WHEN d.tipo_iva='GRAVADA' THEN d.cantidad*d.precio_unitario ELSE 0 END),0)*0.13,2) iva,
       COALESCE(SUM(d.cantidad*d.precio_unitario),0)+ROUND(COALESCE(SUM(CASE WHEN d.tipo_iva='GRAVADA' THEN d.cantidad*d.precio_unitario ELSE 0 END),0)*0.13,2) total
       FROM compra c JOIN proveedor p ON p.id=c.proveedor_id
-      LEFT JOIN compra_detalle d ON d.compra_id=c.id GROUP BY c.id,p.nombre ORDER BY c.fecha DESC,c.id DESC""")).mappings().all()
+      LEFT JOIN asiento a ON a.id=c.asiento_id
+      LEFT JOIN compra_detalle d ON d.compra_id=c.id GROUP BY c.id,p.nombre,a.estado ORDER BY c.fecha DESC,c.id DESC""")).mappings().all()
     return {"compras":[dict(r) for r in rows]}
 
 

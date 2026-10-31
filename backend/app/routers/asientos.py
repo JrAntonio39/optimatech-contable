@@ -325,7 +325,9 @@ def aprobar_asiento(
         ("planilla", "CONTABILIZADA", "planilla", "codigo"),
     ):
         source = db.execute(
-            text(f"SELECT id,{code_column} AS codigo,estado FROM {table} WHERE asiento_id=:id AND estado IN ('PENDIENTE','APROBADA') FOR UPDATE"),
+            # El asiento es la fuente de verdad al aprobar: si el documento
+            # quedó con un estado auxiliar desactualizado, sincronízalo igual.
+            text(f"SELECT id,{code_column} AS codigo,estado FROM {table} WHERE asiento_id=:id AND estado IN ('BORRADOR','PENDIENTE','APROBADA') FOR UPDATE"),
             {"id": asiento_id},
         ).mappings().first()
         if source:
