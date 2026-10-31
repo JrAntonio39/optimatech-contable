@@ -6,13 +6,14 @@
         <div class="text-caption text-grey-7">FE consumidor final y CCF · clientes e integración contable</div>
       </div>
       <q-space />
+      <q-btn flat color="secondary" icon="refresh" label="Actualizar" :loading="actualizandoLista" :disable="cargando || actualizandoLista || guardando || enviando !== null || eliminando !== null || dialog || dialogEliminar" @click="actualizarLista" />
       <q-btn v-if="auth.tienePermiso('facturas.crear')" color="primary" icon="add" label="Nueva factura" @click="abrirFactura" />
     </div>
 
     <q-banner v-if="error && !dialog" class="bg-red-1 text-red q-mb-md" rounded>{{ error }}</q-banner>
     <q-banner v-if="mensaje" class="bg-blue-1 text-blue-10 q-mb-md" rounded>{{ mensaje }}</q-banner>
     <q-card class="opti-card">
-      <q-table :rows="facturas" :columns="columns" row-key="id" :loading="cargando" no-data-label="No hay facturas registradas">
+      <q-table :rows="facturas" :columns="columns" row-key="id" :loading="cargando || actualizandoLista" no-data-label="No hay facturas registradas">
         <template #body-cell-total="props"><q-td :props="props">{{ dinero(props.value) }}</q-td></template>
         <template #body-cell-estado="props"><q-td :props="props"><q-badge :color="colorEstado(props.value)">{{ props.value }}</q-badge></q-td></template>
         <template #body-cell-acciones="props">
@@ -166,7 +167,7 @@ import { operacionesService } from '@/services/operacionesService.js'
 
 const auth=useAuthStore()
 const facturas=ref([]), clientes=ref([]), productosServicios=ref([]), sucursales=ref([]), periodos=ref([]), cuentas=ref([]), cuentasCobrar=ref([]), cuentasPago=ref([])
-const cargando=ref(false), guardando=ref(false), enviando=ref(null), eliminando=ref(null), facturaEliminar=ref(null), dialogEliminar=ref(false), errorEliminar=ref(''), pdfCargando=ref(null), facturaPdf=ref(null), error=ref(''), mensaje=ref(''), dialog=ref(false)
+const cargando=ref(false), actualizandoLista=ref(false), guardando=ref(false), enviando=ref(null), eliminando=ref(null), facturaEliminar=ref(null), dialogEliminar=ref(false), errorEliminar=ref(''), pdfCargando=ref(null), facturaPdf=ref(null), error=ref(''), mensaje=ref(''), dialog=ref(false)
 const tiposFactura=[{label:'Factura electrónica · consumidor final (FE)',value:'FCON'},{label:'Comprobante de crédito fiscal (CCF)',value:'CCF'}]
 const hoy=()=>{const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`}
 const lineaVacia=(cuentaCodigo='',productoCodigo=null)=>({descripcion:'',cantidad:1,unidad_medida:'UNIDAD',precio_unitario:0,tipo_venta:'GRAVADA',producto_codigo:productoCodigo,cuenta_codigo:cuentaCodigo})
@@ -279,8 +280,13 @@ async function eliminarBorrador(){
   finally{eliminando.value=null}
 }
 async function refrescarFacturas(){
-  if(document.visibilityState!=='visible'||cargando.value||guardando.value||enviando.value!==null||eliminando.value!==null||dialog.value||dialogEliminar.value)return
+  if(document.visibilityState!=='visible'||cargando.value||actualizandoLista.value||guardando.value||enviando.value!==null||eliminando.value!==null||dialog.value||dialogEliminar.value)return
   try{const result=await operacionesService.facturas();facturas.value=result.facturas}catch(e){error.value=e.message}
+}
+async function actualizarLista(){
+  if(dialog.value||dialogEliminar.value||guardando.value||enviando.value!==null||eliminando.value!==null||actualizandoLista.value)return
+  actualizandoLista.value=true;error.value=''
+  try{const result=await operacionesService.facturas();facturas.value=result.facturas}catch(e){error.value=e.message}finally{actualizandoLista.value=false}
 }
 function refrescarAlVolver(){if(document.visibilityState==='visible')refrescarFacturas()}
 onMounted(()=>{

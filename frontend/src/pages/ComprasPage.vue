@@ -1,6 +1,6 @@
 <template>
   <q-page padding>
-    <div class="row items-center q-mb-md"><div><div class="text-h5">Compras</div><div class="text-caption text-grey-7">Registro de compras e IVA crédito fiscal</div></div><q-space/><q-btn v-if="auth.tienePermiso('compras.crear')" color="primary" icon="add" label="Nueva compra" @click="abrirCompra"/></div>
+    <div class="row items-center q-mb-md"><div><div class="text-h5">Compras</div><div class="text-caption text-grey-7">Registro de compras e IVA crédito fiscal</div></div><q-space/><q-btn flat color="secondary" icon="refresh" label="Actualizar" :loading="actualizandoLista" :disable="cargando||actualizandoLista||guardando||enviando!==null||dialog" @click="actualizarLista"/><q-btn v-if="auth.tienePermiso('compras.crear')" color="primary" icon="add" label="Nueva compra" @click="abrirCompra"/></div>
     <q-banner v-if="error" class="bg-red-1 text-red q-mb-md" rounded>{{ error }}</q-banner><q-banner v-if="mensaje" class="bg-blue-1 text-blue-10 q-mb-md" rounded>{{ mensaje }}</q-banner>
     <q-card class="opti-card"><q-table :rows="compras" :columns="columns" row-key="id" :loading="cargando" no-data-label="No hay compras registradas">
       <template #body-cell-total="p"><q-td :props="p">{{ dinero(p.value) }}</q-td></template><template #body-cell-estado="p"><q-td :props="p"><q-badge :color="colorEstado(p.value)">{{ p.value }}</q-badge></q-td></template>
@@ -37,7 +37,7 @@ import {useQuasar} from 'quasar'
 import {useAuthStore} from '@/stores/auth.js'
 import {api} from '@/services/api.js'
 import {operacionesService} from '@/services/operacionesService.js'
-const $q=useQuasar(),auth=useAuthStore();const compras=ref([]),proveedores=ref([]),sucursales=ref([]),periodos=ref([]),cuentas=ref([]),error=ref(''),mensaje=ref(''),cargando=ref(false),guardando=ref(false),enviando=ref(null),dialog=ref(false)
+const $q=useQuasar(),auth=useAuthStore();const compras=ref([]),proveedores=ref([]),sucursales=ref([]),periodos=ref([]),cuentas=ref([]),error=ref(''),mensaje=ref(''),cargando=ref(false),actualizandoLista=ref(false),guardando=ref(false),enviando=ref(null),dialog=ref(false)
 const hoy=()=>new Date().toISOString().slice(0,10),lineaVacia=()=>({descripcion:'',cantidad:1,precio_unitario:0,cuenta_codigo:null,tipo_iva:'GRAVADA'}),nuevo=()=>({numero:'',tipo_doc:'CCF',fecha:hoy(),proveedor_id:null,sucursal_id:null,periodo_id:null,detalles:[lineaVacia()]})
 const form=ref(nuevo()),importeLinea=linea=>Math.round(((Number(linea.cantidad)||0)*(Number(linea.precio_unitario)||0)+Number.EPSILON)*100)/100
 let refreshComprasTimer=null
@@ -53,7 +53,8 @@ function cuentaLabel(cuenta){if(!cuenta)return '';return [cuenta.codigo,cuenta.n
 function abrirCompra(){form.value=nuevo();form.value.periodo_id=periodos.value[0]?.id||null;form.value.sucursal_id=auth.usuario?.sucursal_id||sucursales.value[0]?.id||null;dialog.value=true}
 async function guardar(){guardando.value=true;error.value='';try{const result=await operacionesService.crearCompra(form.value);dialog.value=false;mensaje.value=`Compra ${result.numero} guardada como borrador.`;$q.notify({type:'positive',message:'Compra registrada'});await cargar()}catch(e){error.value=e.message}finally{guardando.value=false}}
 async function enviar(row){enviando.value=row.id;error.value='';try{const r=await operacionesService.enviarCompra(row.id);mensaje.value=`Asiento ${r.asiento_codigo} pendiente de aprobación. Apruébalo en Control.`;await cargar()}catch(e){error.value=e.message}finally{enviando.value=null}}
-async function refrescarCompras(){if(document.visibilityState!=='visible'||cargando.value||guardando.value||enviando.value!==null||dialog.value)return;try{const result=await operacionesService.compras();compras.value=result.compras}catch(e){error.value=e.message}}
+async function refrescarCompras(){if(document.visibilityState!=='visible'||cargando.value||actualizandoLista.value||guardando.value||enviando.value!==null||dialog.value)return;try{const result=await operacionesService.compras();compras.value=result.compras}catch(e){error.value=e.message}}
+async function actualizarLista(){if(dialog.value||guardando.value||enviando.value!==null||actualizandoLista.value)return;actualizandoLista.value=true;error.value='';try{const result=await operacionesService.compras();compras.value=result.compras}catch(e){error.value=e.message}finally{actualizandoLista.value=false}}
 function refrescarAlVolver(){if(document.visibilityState==='visible')refrescarCompras()}
 onMounted(()=>{cargar();refreshComprasTimer=window.setInterval(refrescarCompras,5000);window.addEventListener('focus',refrescarAlVolver);document.addEventListener('visibilitychange',refrescarAlVolver)})
 onUnmounted(()=>{if(refreshComprasTimer)window.clearInterval(refreshComprasTimer);window.removeEventListener('focus',refrescarAlVolver);document.removeEventListener('visibilitychange',refrescarAlVolver)})
