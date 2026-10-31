@@ -67,6 +67,9 @@ async function request(path, options = {}) {
         ...getAuthHeader()
       },
       ...options,
+      // Las listas operativas se consultan periódicamente desde otros equipos.
+      // Evita que el navegador reutilice una respuesta GET anterior.
+      cache: options.cache ?? 'no-store',
       body: options.body ? JSON.stringify(options.body) : undefined
     })
   } catch {

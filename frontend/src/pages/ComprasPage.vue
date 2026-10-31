@@ -54,6 +54,7 @@ function abrirCompra(){form.value=nuevo();form.value.periodo_id=periodos.value[0
 async function guardar(){guardando.value=true;error.value='';try{const result=await operacionesService.crearCompra(form.value);dialog.value=false;mensaje.value=`Compra ${result.numero} guardada como borrador.`;$q.notify({type:'positive',message:'Compra registrada'});await cargar()}catch(e){error.value=e.message}finally{guardando.value=false}}
 async function enviar(row){enviando.value=row.id;error.value='';try{const r=await operacionesService.enviarCompra(row.id);mensaje.value=`Asiento ${r.asiento_codigo} pendiente de aprobación. Apruébalo en Control.`;await cargar()}catch(e){error.value=e.message}finally{enviando.value=null}}
 async function refrescarCompras(){if(document.visibilityState!=='visible'||cargando.value||guardando.value||enviando.value!==null||dialog.value)return;try{const result=await operacionesService.compras();compras.value=result.compras}catch(e){error.value=e.message}}
-onMounted(()=>{cargar();refreshComprasTimer=window.setInterval(refrescarCompras,15000)})
-onUnmounted(()=>{if(refreshComprasTimer)window.clearInterval(refreshComprasTimer)})
+function refrescarAlVolver(){if(document.visibilityState==='visible')refrescarCompras()}
+onMounted(()=>{cargar();refreshComprasTimer=window.setInterval(refrescarCompras,5000);window.addEventListener('focus',refrescarAlVolver);document.addEventListener('visibilitychange',refrescarAlVolver)})
+onUnmounted(()=>{if(refreshComprasTimer)window.clearInterval(refreshComprasTimer);window.removeEventListener('focus',refrescarAlVolver);document.removeEventListener('visibilitychange',refrescarAlVolver)})
 </script>

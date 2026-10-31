@@ -282,11 +282,14 @@ async function refrescarFacturas(){
   if(document.visibilityState!=='visible'||cargando.value||guardando.value||enviando.value!==null||eliminando.value!==null||dialog.value||dialogEliminar.value)return
   try{const result=await operacionesService.facturas();facturas.value=result.facturas}catch(e){error.value=e.message}
 }
+function refrescarAlVolver(){if(document.visibilityState==='visible')refrescarFacturas()}
 onMounted(()=>{
   cargar()
-  refreshFacturasTimer=window.setInterval(refrescarFacturas,15000)
+  refreshFacturasTimer=window.setInterval(refrescarFacturas,5000)
+  window.addEventListener('focus',refrescarAlVolver)
+  document.addEventListener('visibilitychange',refrescarAlVolver)
 })
-onUnmounted(()=>{if(refreshFacturasTimer)window.clearInterval(refreshFacturasTimer)})
+onUnmounted(()=>{if(refreshFacturasTimer)window.clearInterval(refreshFacturasTimer);window.removeEventListener('focus',refrescarAlVolver);document.removeEventListener('visibilitychange',refrescarAlVolver)})
 </script>
 
 <style>
