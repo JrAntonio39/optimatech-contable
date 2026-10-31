@@ -15,7 +15,7 @@
     <q-card class="opti-card">
       <q-table :rows="facturas" :columns="columns" row-key="id" :loading="cargando || actualizandoLista" no-data-label="No hay facturas registradas">
         <template #body-cell-total="props"><q-td :props="props">{{ dinero(props.value) }}</q-td></template>
-        <template #body-cell-estado="props"><q-td :props="props"><q-badge :color="colorEstado(props.value)">{{ props.value }}</q-badge></q-td></template>
+        <template #body-cell-estado="props"><q-td :props="props"><q-badge :color="colorEstado(estadoVisibleFactura(props.row))">{{ estadoVisibleFactura(props.row) }}</q-badge></q-td></template>
         <template #body-cell-acciones="props">
           <q-td :props="props" class="q-gutter-xs">
             <q-btn dense flat color="primary" icon="picture_as_pdf" label="PDF" :loading="pdfCargando===props.row.id" @click="generarPdf(props.row)" />
@@ -178,6 +178,7 @@ const unidadesMedida=[{label:'Unidad',value:'UNIDAD'},{label:'Servicio',value:'S
 const nuevoForm=()=>({numero:'',tipo_dte:'CCF',fecha:hoy(),cliente_id:null,sucursal_id:null,periodo_id:null,condicion_operacion:'CONTADO',forma_pago:'EFECTIVO',plazo_pago:null,cuenta_pago_codigo:'1.1.1.01',nota_remision_numero:'',nota_remision_fecha:null,detalles:[lineaVacia()]})
 const form=ref(nuevoForm())
 let refreshFacturasTimer = null
+let secuenciaConsultaFacturas = 0
 watch(form,()=>{if(dialog.value&&error.value)error.value=''}, {deep:true})
 function limpiarError(){error.value=''}
 const cuentaIngresoPredeterminada=computed(()=>cuentas.value.find(c=>c.codigo==='5.1.1.01')?.codigo||cuentas.value[0]?.codigo||'')
@@ -196,16 +197,19 @@ const fechaFmt=v=>{if(!v)return '';const [y,m,d]=String(v).slice(0,10).split('-'
 const horaFmt=v=>v?new Intl.DateTimeFormat('es-SV',{hour:'2-digit',minute:'2-digit'}).format(new Date(v)):''
 const tipoFacturaLabel=v=>v==='CCF'?'COMPROBANTE DE CRÉDITO FISCAL':'FACTURA DE CONSUMIDOR FINAL'
 const tipoVentaLabel=v=>({GRAVADA:'Gravada',EXENTA:'Exenta',NO_SUJETA:'No sujeta'}[v]||'Gravada')
-const colorEstado=v=>v==='VIGENTE'?'positive':v==='PENDIENTE'?'orange':'grey'
+const estadoVisibleFactura=factura=>{const estado=String(factura.asiento_estado||'').toUpperCase();if(estado==='VIGENTE'||estado==='PENDIENTE')return estado;if(estado==='RECHAZADO'||estado==='ANULADO')return 'ANULADA';return String(factura.estado||'BORRADOR').toUpperCase()}
+const normalizarFacturas=rows=>(rows||[]).map(factura=>({...factura,estado:estadoVisibleFactura(factura)}))
+const colorEstado=v=>({VIGENTE:'positive',PENDIENTE:'orange',BORRADOR:'grey-7',ANULADA:'grey-7'})[String(v||'').toUpperCase()]||'grey-7'
 async function cargar(){
-  cargando.value=true;error.value=''
+  const secuencia=++secuenciaConsultaFacturas;cargando.value=true;error.value=''
   try{
     const [f,c,ps,s,p,a,r,ef]=await Promise.all([
       operacionesService.facturas(),operacionesService.clientes(),operacionesService.productosServicios(),
       api.get('/api/sucursales'),api.get('/api/periodos'),api.get('/api/cuentas?q=5.'),
       api.get('/api/cuentas?q=1.1.3.'),api.get('/api/cuentas?q=1.1.1.')
     ])
-    facturas.value=f.facturas
+    if(secuencia!==secuenciaConsultaFacturas)return
+    facturas.value=normalizarFacturas(f.facturas)
     clientes.value=c.clientes.filter(x=>x.estado==='ACTIVO')
     productosServicios.value=ps.productos.map(x=>({...x,etiqueta:`${x.linea_negocio} · ${x.nombre}`}))
     sucursales.value=s.sucursales
@@ -217,7 +221,7 @@ async function cargar(){
     const padresPago=new Set(ef.cuentas.map(x=>x.codigo_padre))
     cuentasPago.value=ef.cuentas.filter(x=>x.codigo.startsWith('1.1.1.')&&!padresPago.has(x.codigo))
     for(const linea of form.value.detalles){if(!linea.cuenta_codigo)linea.cuenta_codigo=cuentaIngresoPredeterminada.value}
-  }catch(e){error.value=e.message}finally{cargando.value=false}
+  }catch(e){if(secuencia===secuenciaConsultaFacturas)error.value=e.message}finally{if(secuencia===secuenciaConsultaFacturas)cargando.value=false}
 }
 function abrirFactura(){
   limpiarError()
@@ -281,12 +285,13 @@ async function eliminarBorrador(){
 }
 async function refrescarFacturas(){
   if(document.visibilityState!=='visible'||cargando.value||actualizandoLista.value||guardando.value||enviando.value!==null||eliminando.value!==null||dialog.value||dialogEliminar.value)return
-  try{const result=await operacionesService.facturas();facturas.value=result.facturas}catch(e){error.value=e.message}
+  const secuencia=++secuenciaConsultaFacturas
+  try{const result=await operacionesService.facturas();if(secuencia===secuenciaConsultaFacturas)facturas.value=normalizarFacturas(result.facturas)}catch(e){if(secuencia===secuenciaConsultaFacturas)error.value=e.message}
 }
 async function actualizarLista(){
   if(dialog.value||dialogEliminar.value||guardando.value||enviando.value!==null||eliminando.value!==null||actualizandoLista.value)return
-  actualizandoLista.value=true;error.value=''
-  try{const result=await operacionesService.facturas();facturas.value=result.facturas}catch(e){error.value=e.message}finally{actualizandoLista.value=false}
+  actualizandoLista.value=true;error.value='';const secuencia=++secuenciaConsultaFacturas
+  try{const result=await operacionesService.facturas();if(secuencia===secuenciaConsultaFacturas)facturas.value=normalizarFacturas(result.facturas)}catch(e){if(secuencia===secuenciaConsultaFacturas)error.value=e.message}finally{if(secuencia===secuenciaConsultaFacturas)actualizandoLista.value=false}
 }
 function refrescarAlVolver(){if(document.visibilityState==='visible')refrescarFacturas()}
 onMounted(()=>{

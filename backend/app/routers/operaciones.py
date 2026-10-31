@@ -493,16 +493,23 @@ def invoices(db: Session = Depends(get_db), user: Usuario = Depends(require_perm
              desde: Optional[date] = None, hasta: Optional[date] = None):
     if desde and hasta and desde > hasta: raise HTTPException(400, "Rango de fechas inválido")
     rows = db.execute(text("""SELECT f.id,f.numero,f.tipo_dte,f.fecha,f.cliente_id,c.nombre cliente,
-      f.sucursal_id,f.periodo_id,f.estado,f.asiento_id,COUNT(d.id) lineas,
+      f.sucursal_id,f.periodo_id,
+      CASE WHEN a.estado='VIGENTE' THEN 'VIGENTE'
+           WHEN a.estado='PENDIENTE' THEN 'PENDIENTE'
+           WHEN a.estado IN ('RECHAZADO','ANULADO') THEN 'ANULADA'
+           ELSE f.estado END AS estado,
+      a.estado AS asiento_estado,f.asiento_id,COUNT(d.id) lineas,
       COALESCE(SUM(ROUND(d.cantidad*d.precio_unitario,2)),0) subtotal,
       COALESCE(SUM(CASE WHEN d.tipo_venta='GRAVADA' THEN ROUND(d.cantidad*d.precio_unitario,2) ELSE 0 END),0) gravada,
       COALESCE(SUM(CASE WHEN d.tipo_venta='EXENTA' THEN ROUND(d.cantidad*d.precio_unitario,2) ELSE 0 END),0) exenta,
       COALESCE(SUM(CASE WHEN d.tipo_venta='NO_SUJETA' THEN ROUND(d.cantidad*d.precio_unitario,2) ELSE 0 END),0) no_sujeta,
       ROUND(COALESCE(SUM(CASE WHEN d.tipo_venta='GRAVADA' THEN ROUND(d.cantidad*d.precio_unitario,2) ELSE 0 END),0)*0.13,2) iva,
       COALESCE(SUM(ROUND(d.cantidad*d.precio_unitario,2)),0)+ROUND(COALESCE(SUM(CASE WHEN d.tipo_venta='GRAVADA' THEN ROUND(d.cantidad*d.precio_unitario,2) ELSE 0 END),0)*0.13,2) total
-      FROM factura f JOIN cliente c ON c.id=f.cliente_id LEFT JOIN factura_detalle d ON d.factura_id=f.id
+      FROM factura f JOIN cliente c ON c.id=f.cliente_id
+      LEFT JOIN asiento a ON a.id=f.asiento_id
+      LEFT JOIN factura_detalle d ON d.factura_id=f.id
       WHERE (:desde IS NULL OR f.fecha>=:desde) AND (:hasta IS NULL OR f.fecha<=:hasta)
-      GROUP BY f.id,c.nombre ORDER BY f.fecha DESC,f.id DESC"""), {"desde":desde,"hasta":hasta}).mappings().all()
+      GROUP BY f.id,c.nombre,a.estado ORDER BY f.fecha DESC,f.id DESC"""), {"desde":desde,"hasta":hasta}).mappings().all()
     return {"facturas":[dict(r) for r in rows]}
 
 
@@ -778,6 +785,7 @@ def activate_supplier(proveedor_id:int,db:Session=Depends(get_db),user:Usuario=D
 @router.get("/compras")
 def purchases(db:Session=Depends(get_db),user:Usuario=Depends(require_permission("compras","ver"))):
     rows=db.execute(text("""SELECT c.id,c.numero,c.tipo_doc,c.fecha,c.proveedor_id,p.nombre proveedor,c.sucursal_id,c.periodo_id,
+      a.estado AS asiento_estado,
       CASE WHEN a.estado='VIGENTE' THEN 'VIGENTE'
            WHEN a.estado='PENDIENTE' THEN 'PENDIENTE'
            WHEN a.estado='RECHAZADO' THEN 'RECHAZADO'
@@ -937,12 +945,24 @@ def activate_employee(employee_id:int,db:Session=Depends(get_db),user:Usuario=De
 
 @router.get("/planillas")
 def payrolls(db:Session=Depends(get_db),user:Usuario=Depends(require_permission("planilla","ver"))):
-    rows=db.execute(text("""SELECT p.id,p.codigo,p.periodo,p.fecha_pago,p.sucursal_id,p.tipo,p.estado,p.asiento_id,p.periodo_id,
+    rows=db.execute(text("""SELECT p.id,p.codigo,p.periodo,p.fecha_pago,p.sucursal_id,p.tipo,
+      CASE
+        WHEN EXISTS (SELECT 1 FROM planilla_pago pp JOIN asiento pa ON pa.id=pp.asiento_id
+                     WHERE pp.planilla_id=p.id AND pa.estado='PENDIENTE') THEN 'PAGO_PENDIENTE'
+        WHEN EXISTS (SELECT 1 FROM planilla_pago pp JOIN asiento pa ON pa.id=pp.asiento_id
+                     WHERE pp.planilla_id=p.id AND pa.estado='VIGENTE') THEN 'PAGADA'
+        WHEN a.estado='PENDIENTE' THEN 'PENDIENTE'
+        WHEN a.estado='VIGENTE' AND p.estado<>'PAGADA' THEN 'CONTABILIZADA'
+        ELSE p.estado END AS estado,
+      a.estado AS asiento_estado,p.asiento_id,p.periodo_id,
       COUNT(d.id) empleados,COALESCE(SUM(d.salario_base*d.dias_trabajados/30+d.horas_extra+d.bonificaciones+d.comisiones),0) bruto,
       COALESCE(SUM(d.deduccion_isss+d.deduccion_afp+d.deduccion_renta+d.otras_deducciones),0) deducciones,
       COALESCE(SUM(d.isss_patronal+d.afp_patronal),0) aportes_patronales,
       COALESCE(SUM(d.salario_base*d.dias_trabajados/30+d.horas_extra+d.bonificaciones+d.comisiones-d.deduccion_isss-d.deduccion_afp-d.deduccion_renta-d.otras_deducciones),0) liquido
-      FROM planilla p LEFT JOIN planilla_detalle d ON d.planilla_id=p.id GROUP BY p.id ORDER BY p.periodo DESC,p.id DESC""")).mappings().all()
+      FROM planilla p
+      LEFT JOIN asiento a ON a.id=p.asiento_id
+      LEFT JOIN planilla_detalle d ON d.planilla_id=p.id
+      GROUP BY p.id,a.estado ORDER BY p.periodo DESC,p.id DESC""")).mappings().all()
     return {"planillas":[dict(r) for r in rows]}
 
 
