@@ -7,7 +7,7 @@ de facturas, compras y planillas de salarios.
 
 ## Stack
 
-- **BD:** PostgreSQL 17 (Docker, puerto `5434`) — NO usa Supabase.
+- **BD local:** PostgreSQL 17 (Docker, puerto `5434`). Para despliegue compartido se puede usar Supabase PostgreSQL.
 - **Backend:** Python + FastAPI (`backend/`, puerto `8000`).
 - **Frontend:** Vue 3 + Quasar + Pinia (`frontend/`, puerto `9000`).
 
@@ -27,6 +27,8 @@ docker compose up -d
 # 2b. Cargar esquema + datos (217 cuentas del catálogo y tablas del sistema)
 # Solo la primera vez (o para resetear la BD):
 docker exec -i optimatech_db psql -U postgres -d optimatech_db < db/optimatech_init.sql
+# Completar estructuras base de autenticación/empresa (no elimina datos):
+docker exec -i optimatech_db psql -v ON_ERROR_STOP=1 -U postgres -d optimatech_db < db/001_supabase_app_tables.sql
 # Aplicar controles operativos (auditoría, estados de aprobación y reversos):
 docker exec -i optimatech_db psql -v ON_ERROR_STOP=1 -U postgres -d optimatech_db < db/002_operational_controls.sql
 # Agregar el registro contable de desembolsos de planilla:
@@ -41,11 +43,84 @@ docker exec -i optimatech_db psql -v ON_ERROR_STOP=1 -U postgres -d optimatech_d
 docker exec -i optimatech_db psql -v ON_ERROR_STOP=1 -U postgres -d optimatech_db < db/007_rechazo_asientos_pendientes.sql
 docker exec -i optimatech_db psql -v ON_ERROR_STOP=1 -U postgres -d optimatech_db < db/008_catalogo_cargos_empleado.sql
 docker exec -i optimatech_db psql -v ON_ERROR_STOP=1 -U postgres -d optimatech_db < db/009_empleado_identificaciones_unicas.sql
+docker exec -i optimatech_db psql -v ON_ERROR_STOP=1 -U postgres -d optimatech_db < db/010_compra_clasificacion_iva.sql
 
 > La pantalla de facturación genera comprobantes internos de práctica y una
 > versión imprimible. No genera DTE autorizados: para validez fiscal el DTE debe
 > ajustarse al formato de Hacienda, firmarse, transmitirse y recibir su Sello de
 > Recepción.
+
+## Despliegue compartido (Supabase + API + frontend)
+
+La base de datos compartida permite que Ventas y Contabilidad vean los mismos
+registros desde distintas computadoras. Supabase aloja PostgreSQL; también se
+deben publicar el backend FastAPI y el frontend Quasar. El aprobador recibe las
+nuevas partidas en Control mediante actualización automática cada 15 segundos
+mientras esa pestaña está abierta. No se requiere WebSocket para el flujo.
+
+### Base de datos Supabase
+
+1. Copia la conexión de PostgreSQL desde **Connect**. Para un backend
+   persistente, utiliza la conexión directa o Session Pooler según la red del
+   servidor. Configura SSL (`sslmode=require`).
+2. Si Supabase ya tiene el esquema resumido mostrado en el SQL de contexto,
+   **no ejecutes `db/optimatech_init.sql`**: ese dump elimina/recrea tablas.
+   Ejecuta `db/001_supabase_app_tables.sql` y después `db/002_*.sql` hasta
+   `db/010_*.sql` en orden. Las migraciones agregan controles, autenticación,
+   aprobaciones, pagos de planilla, datos de facturación, catálogos y el IVA
+   por línea de compra sin reemplazar las tablas existentes.
+3. Ejecuta `python3 -m scripts.seed_permisos` desde `backend` para crear los
+   permisos y aplicar la matriz de roles. Si aún no existe ningún usuario,
+   crea el administrador inicial con `python3 -m scripts.crear_admin`; genera
+   una contraseña aleatoria y la muestra una sola vez.
+4. Si Supabase es una base completamente vacía, puedes cargar
+   `db/optimatech_init.sql` una sola vez y luego ejecutar `db/001` hasta `db/010`.
+   El dump incluye tablas y datos de ejemplo de la base local; úsalo solo si
+   quieres importar esos datos demostrativos.
+
+Para tu Supabase que ya contiene el esquema básico, desde la raíz del proyecto
+ejecuta esto. **Este bloque no carga ni borra el dump inicial** y te pide la
+conexión sin guardarla en el historial del shell:
+
+```bash
+read -r -s -p "DATABASE_URL de Supabase: " DATABASE_URL; printf '\n'; export DATABASE_URL
+for archivo in db/001_*.sql db/0{02..10}_*.sql; do psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$archivo"; done
+(cd backend && python3 -m scripts.seed_permisos)
+unset DATABASE_URL
+```
+
+Después configura `DATABASE_URL` en el entorno del backend y ejecuta desde
+`backend` `python3 -m scripts.seed_permisos`. Como el esquema que compartiste no
+incluye la tabla de usuarios, crea el administrador inicial una sola vez con
+`python3 -m scripts.crear_admin`; la contraseña se muestra una sola vez.
+
+La secuencia que carga `db/optimatech_init.sql` aplica **solo a una base vacía**
+cuando quieras importar también los datos demostrativos locales. Ese dump
+elimina/recrea objetos; nunca lo uses sobre tu Supabase actual.
+
+No subas la cadena de conexión, el archivo `.env`, ni contraseñas al repositorio.
+La URL de Supabase va únicamente en `DATABASE_URL` del backend.
+
+### Variables del backend publicado
+
+Configura estas variables en el servicio donde ejecutes `backend/Dockerfile`:
+
+```text
+DATABASE_URL=<cadena PostgreSQL de Supabase con SSL>
+APP_ENV=production
+JWT_SECRET=<secreto aleatorio largo y privado>
+CORS_ORIGINS=https://<dominio-del-frontend>
+JWT_EXPIRE_MIN=480
+```
+
+### Frontend publicado
+
+Construye `frontend/Dockerfile` con `VITE_API_URL` apuntando al backend, sin
+barra final, por ejemplo `https://api.ejemplo.com`. Ese valor se incorpora al
+frontend durante la compilación. No pongas credenciales de PostgreSQL aquí.
+
+Para desarrollo local no cambies estos valores: Quasar usa el proxy de
+`quasar.config.js` y el `.env` local del backend.
 
 # 3. Backend
 cd backend

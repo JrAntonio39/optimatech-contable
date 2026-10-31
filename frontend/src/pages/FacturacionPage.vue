@@ -159,7 +159,7 @@
 </template>
 
 <script setup>
-import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useAuthStore } from '@/stores/auth.js'
 import { api } from '@/services/api.js'
 import { operacionesService } from '@/services/operacionesService.js'
@@ -176,6 +176,7 @@ const tiposVenta=[{label:'Gravada con IVA',value:'GRAVADA'},{label:'Exenta',valu
 const unidadesMedida=[{label:'Unidad',value:'UNIDAD'},{label:'Servicio',value:'SERVICIO'},{label:'Hora',value:'HORA'},{label:'Mes',value:'MES'},{label:'Licencia',value:'LICENCIA'},{label:'Equipo',value:'EQUIPO'},{label:'Kit',value:'KIT'}]
 const nuevoForm=()=>({numero:'',tipo_dte:'CCF',fecha:hoy(),cliente_id:null,sucursal_id:null,periodo_id:null,condicion_operacion:'CONTADO',forma_pago:'EFECTIVO',plazo_pago:null,cuenta_pago_codigo:'1.1.1.01',nota_remision_numero:'',nota_remision_fecha:null,detalles:[lineaVacia()]})
 const form=ref(nuevoForm())
+let refreshFacturasTimer = null
 watch(form,()=>{if(dialog.value&&error.value)error.value=''}, {deep:true})
 function limpiarError(){error.value=''}
 const cuentaIngresoPredeterminada=computed(()=>cuentas.value.find(c=>c.codigo==='5.1.1.01')?.codigo||cuentas.value[0]?.codigo||'')
@@ -277,7 +278,15 @@ async function eliminarBorrador(){
   }catch(e){errorEliminar.value=e.message}
   finally{eliminando.value=null}
 }
-onMounted(cargar)
+async function refrescarFacturas(){
+  if(document.visibilityState!=='visible'||cargando.value||guardando.value||enviando.value!==null||eliminando.value!==null||dialog.value||dialogEliminar.value)return
+  try{const result=await operacionesService.facturas();facturas.value=result.facturas}catch(e){error.value=e.message}
+}
+onMounted(()=>{
+  cargar()
+  refreshFacturasTimer=window.setInterval(refrescarFacturas,15000)
+})
+onUnmounted(()=>{if(refreshFacturasTimer)window.clearInterval(refreshFacturasTimer)})
 </script>
 
 <style>

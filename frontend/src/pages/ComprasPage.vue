@@ -32,7 +32,7 @@
   </q-page>
 </template>
 <script setup>
-import {computed,onMounted,ref} from 'vue'
+import {computed,onMounted,onUnmounted,ref} from 'vue'
 import {useQuasar} from 'quasar'
 import {useAuthStore} from '@/stores/auth.js'
 import {api} from '@/services/api.js'
@@ -40,6 +40,7 @@ import {operacionesService} from '@/services/operacionesService.js'
 const $q=useQuasar(),auth=useAuthStore();const compras=ref([]),proveedores=ref([]),sucursales=ref([]),periodos=ref([]),cuentas=ref([]),error=ref(''),mensaje=ref(''),cargando=ref(false),guardando=ref(false),enviando=ref(null),dialog=ref(false)
 const hoy=()=>new Date().toISOString().slice(0,10),lineaVacia=()=>({descripcion:'',cantidad:1,precio_unitario:0,cuenta_codigo:null,tipo_iva:'GRAVADA'}),nuevo=()=>({numero:'',tipo_doc:'CCF',fecha:hoy(),proveedor_id:null,sucursal_id:null,periodo_id:null,detalles:[lineaVacia()]})
 const form=ref(nuevo()),importeLinea=linea=>Math.round(((Number(linea.cantidad)||0)*(Number(linea.precio_unitario)||0)+Number.EPSILON)*100)/100
+let refreshComprasTimer=null
 const baseGravada=computed(()=>form.value.detalles.filter(line=>line.tipo_iva==='GRAVADA').reduce((sum,line)=>sum+importeLinea(line),0))
 const baseExenta=computed(()=>form.value.detalles.filter(line=>line.tipo_iva==='EXENTA').reduce((sum,line)=>sum+importeLinea(line),0))
 const baseNoSujeta=computed(()=>form.value.detalles.filter(line=>line.tipo_iva==='NO_SUJETA').reduce((sum,line)=>sum+importeLinea(line),0))
@@ -51,5 +52,7 @@ function cuentaLabel(cuenta){if(!cuenta)return '';return [cuenta.codigo,cuenta.n
 function abrirCompra(){form.value=nuevo();form.value.periodo_id=periodos.value[0]?.id||null;form.value.sucursal_id=auth.usuario?.sucursal_id||sucursales.value[0]?.id||null;dialog.value=true}
 async function guardar(){guardando.value=true;error.value='';try{const result=await operacionesService.crearCompra(form.value);dialog.value=false;mensaje.value=`Compra ${result.numero} guardada como borrador.`;$q.notify({type:'positive',message:'Compra registrada'});await cargar()}catch(e){error.value=e.message}finally{guardando.value=false}}
 async function enviar(row){enviando.value=row.id;error.value='';try{const r=await operacionesService.enviarCompra(row.id);mensaje.value=`Asiento ${r.asiento_codigo} pendiente de aprobación. Apruébalo en Control.`;await cargar()}catch(e){error.value=e.message}finally{enviando.value=null}}
-onMounted(cargar)
+async function refrescarCompras(){if(document.visibilityState!=='visible'||cargando.value||guardando.value||enviando.value!==null||dialog.value)return;try{const result=await operacionesService.compras();compras.value=result.compras}catch(e){error.value=e.message}}
+onMounted(()=>{cargar();refreshComprasTimer=window.setInterval(refrescarCompras,15000)})
+onUnmounted(()=>{if(refreshComprasTimer)window.clearInterval(refreshComprasTimer)})
 </script>

@@ -381,7 +381,7 @@ class PayrollIn(BaseModel):
     codigo: Optional[str] = Field(None, max_length=20)
     periodo: str = Field(..., pattern=r"^\d{4}-(0[1-9]|1[0-2])$")
     fecha_pago: date
-    sucursal_id: Optional[int] = None
+    sucursal_id: int
     periodo_id: int
     detalles: list[PayrollLineIn] = Field(..., min_length=1)
 
@@ -957,12 +957,16 @@ def payroll_detail(doc_id:int,db:Session=Depends(get_db),user:Usuario=Depends(re
 def create_payroll(data:PayrollIn,db:Session=Depends(get_db),user:Usuario=Depends(require_permission("planilla","crear"))):
     check_period(db,data.periodo_id,data.fecha_pago)
     if data.periodo != data.fecha_pago.strftime("%Y-%m"): raise HTTPException(400,"El período YYYY-MM debe coincidir con la fecha de pago")
+    if not db.execute(text("SELECT 1 FROM sucursal WHERE id=:id"),{"id":data.sucursal_id}).first():
+        raise HTTPException(400,"La sucursal seleccionada no existe")
     ids=[x.empleado_id for x in data.detalles]
     if len(ids)!=len(set(ids)): raise HTTPException(400,"No repita empleados en la misma planilla")
     by_id={}
     for employee_id in ids:
-        employee_row=db.execute(text("SELECT id,salario_base FROM empleado WHERE id=:id AND estado='ACTIVO'"),{"id":employee_id}).mappings().first()
+        employee_row=db.execute(text("SELECT id,salario_base,sucursal_id FROM empleado WHERE id=:id AND estado='ACTIVO'"),{"id":employee_id}).mappings().first()
         if not employee_row: raise HTTPException(400,"Uno o más empleados no existen o están inactivos")
+        if employee_row["sucursal_id"] != data.sucursal_id:
+            raise HTTPException(400,f"El empleado {employee_id} no pertenece a la sucursal seleccionada para la planilla")
         by_id[employee_id]=employee_row
     for line in data.detalles:
         if line.cuenta_gasto_codigo not in ("4.1.1.09", "4.1.3.01", "4.1.4.01"):

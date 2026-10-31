@@ -25,6 +25,7 @@
     <template v-if="tab === 'aprobaciones'">
       <div class="row items-center q-gutter-md q-mb-md">
         <q-chip color="orange-2"> Pendientes: {{ pendientes.length }} </q-chip>
+        <span class="text-caption text-grey-7">Actualización automática cada 15 segundos</span>
         <q-space />
         <q-btn
           flat
@@ -323,7 +324,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { controlService } from '@/services/controlService.js'
 import { useAuthStore } from '@/stores/auth.js'
 
@@ -363,6 +364,7 @@ const formPeriodo = ref({
 const periodosAbiertos = computed(() =>
   periodos.value.filter(p => p.estado === 'ABIERTO')
 )
+let refreshPendientesTimer = null
 
 const filtroModulo = ref(null)
 const filtroAccion = ref(null)
@@ -649,5 +651,21 @@ async function cargarTabActual() {
 }
 
 watch(tab, () => cargarTabActual())
-onMounted(() => cargarTabActual())
+onMounted(() => {
+  cargarTabActual()
+  refreshPendientesTimer = window.setInterval(() => {
+    if (
+      tab.value === 'aprobaciones' &&
+      auth.tienePermiso('asientos.ver') &&
+      document.visibilityState === 'visible' &&
+      !cargando.value &&
+      !guardando.value
+    ) {
+      cargarPendientes()
+    }
+  }, 15000)
+})
+onUnmounted(() => {
+  if (refreshPendientesTimer) window.clearInterval(refreshPendientesTimer)
+})
 </script>
