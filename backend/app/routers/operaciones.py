@@ -821,7 +821,7 @@ def create_purchase(data:PurchaseIn,db:Session=Depends(get_db),user:Usuario=Depe
 
 
 @router.post("/compras/{doc_id}/enviar")
-def send_purchase(doc_id:int,db:Session=Depends(get_db),user:Usuario=Depends(require_permission("compras","aprobar"))):
+def send_purchase(doc_id:int,db:Session=Depends(get_db),user:Usuario=Depends(require_permission("compras","crear"))):
     doc=db.execute(text("SELECT c.*,p.cuenta_codigo FROM compra c JOIN proveedor p ON p.id=c.proveedor_id WHERE c.id=:i FOR UPDATE"),{"i":doc_id}).mappings().first()
     if not doc: raise HTTPException(404,"Compra no encontrada")
     if doc["estado"]!="BORRADOR": raise HTTPException(409,"Solo se envían compras en borrador")
