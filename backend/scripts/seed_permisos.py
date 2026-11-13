@@ -66,6 +66,14 @@ PERMISOS = {
     ("usuarios", "editar"): "Editar usuarios y roles",
     ("usuarios", "eliminar"): "Desactivar usuarios",
     ("auditoria", "ver"): "Ver bitácora de auditoría",
+    # Proyectos y análisis de rentabilidad (no generan asientos)
+    ("proyectos", "ver"): "Consultar proyectos y trabajos",
+    ("proyectos", "crear"): "Registrar proyectos y actualizar sus datos",
+    ("proyectos", "editar"): "Editar y cambiar el estado de proyectos",
+    ("proyectos", "rentabilidad"): "Consultar ingresos, costos y margen por proyecto",
+    ("proyectos", "asignar_ingresos"): "Relacionar facturas contabilizadas con proyectos",
+    ("proyectos", "asignar_compras"): "Asignar costos de compras contabilizadas a proyectos",
+    ("proyectos", "asignar_planilla"): "Asignar costos de planilla contabilizada a proyectos",
 }
 
 # --------------------------------------------------------------------------
@@ -91,6 +99,8 @@ MATRIZ_ROLES = {
             "reportes.ver", "reportes.crear",
             "auditoria.ver",
             "facturas.ver", "compras.ver", "planilla.ver", "planilla.pagar",
+            "proyectos.ver", "proyectos.crear", "proyectos.editar", "proyectos.rentabilidad",
+            "proyectos.asignar_ingresos", "proyectos.asignar_compras", "proyectos.asignar_planilla",
         ],
     },
     "auxiliar": {
@@ -112,6 +122,7 @@ MATRIZ_ROLES = {
             "cuentas.ver", "periodos.ver", "sucursales.ver",
             "facturas.ver", "facturas.crear", "facturas.editar",
             "facturas.eliminar", "facturas.aprobar",
+            "proyectos.ver", "proyectos.crear", "proyectos.asignar_ingresos",
         ],
     },
     "compras": {
@@ -121,6 +132,7 @@ MATRIZ_ROLES = {
         "permisos": [
             "cuentas.ver", "periodos.ver", "sucursales.ver",
             "compras.ver", "compras.crear", "compras.editar", "compras.aprobar",
+            "proyectos.ver", "proyectos.asignar_compras",
         ],
     },
     "planilla": {
@@ -130,6 +142,7 @@ MATRIZ_ROLES = {
         "permisos": [
             "cuentas.ver", "periodos.ver", "sucursales.ver",
             "planilla.ver", "planilla.crear", "planilla.editar", "planilla.aprobar", "planilla.pagar",
+            "proyectos.ver", "proyectos.asignar_planilla",
         ],
     },
     "auditor": {
@@ -137,6 +150,7 @@ MATRIZ_ROLES = {
         "descripcion": "Solo lectura sobre todo el sistema, incluida la bitácora de auditoría",
         "todos": False,
         "solo_lectura": True,  # todos los permisos *.ver
+        "permisos": ["proyectos.rentabilidad"],
     },
 }
 
@@ -172,7 +186,9 @@ def aplicar():
             if cfg.get("todos"):
                 asignados = db.query(Permiso).all()
             elif cfg.get("solo_lectura"):
-                asignados = db.query(Permiso).filter(Permiso.accion == "ver").all()
+                codigos = [f"{modulo}.ver" for modulo, accion in PERMISOS if accion == "ver"]
+                codigos.extend(cfg.get("permisos", []))
+                asignados = db.query(Permiso).filter(Permiso.codigo.in_(codigos)).all()
             else:
                 asignados = db.query(Permiso).filter(
                     Permiso.codigo.in_(cfg["permisos"])

@@ -115,6 +115,13 @@ export const MENU_SECTIONS = [
         icon: 'payments',
         to: '/planilla',
         permiso: 'planilla.ver'
+      },
+      {
+        label: 'Proyectos',
+        caption: 'Costos y rentabilidad por trabajo',
+        icon: 'work_outline',
+        to: '/proyectos',
+        permiso: 'proyectos.ver'
       }
     ]
   },

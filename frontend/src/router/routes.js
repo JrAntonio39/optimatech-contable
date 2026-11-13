@@ -45,6 +45,7 @@ const routes = [
       { path: 'compras', component: () => import('@/pages/ComprasPage.vue'), meta: { permiso: 'compras.ver' } },
       { path: 'empleados', component: () => import('@/pages/EmpleadosPage.vue'), meta: { permiso: 'planilla.ver' } },
       { path: 'planilla', component: () => import('@/pages/PlanillaPage.vue'), meta: { permiso: 'planilla.ver' } },
+      { path: 'proyectos', component: () => import('@/pages/ProyectosPage.vue'), meta: { permiso: 'proyectos.ver' } },
       {
         path: 'control',
         component: () => import('@/pages/ControlPage.vue'), meta: { permisos: ['asientos.ver', 'asientos.aprobar', 'periodos.ver', 'periodos.crear', 'periodos.cerrar', 'sucursales.ver', 'auditoria.ver'] }

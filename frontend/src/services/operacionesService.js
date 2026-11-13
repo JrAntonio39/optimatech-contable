@@ -25,3 +25,14 @@ export const operacionesService = {
   enviarPlanilla: id => api.post(`/api/planillas/${id}/enviar`),
   pagarPlanilla: (id, data) => api.post(`/api/planillas/${id}/pagar`, data)
 }
+
+export const proyectosService = {
+  listar: () => api.get('/api/proyectos'),
+  crear: data => api.post('/api/proyectos', data),
+  actualizar: (id, data) => api.put(`/api/proyectos/${id}`, data),
+  rentabilidad: id => api.get(`/api/proyectos/${id}/rentabilidad`),
+  fuentes: (id, tipo) => api.get(`/api/proyectos/${id}/fuentes/${tipo}`),
+  asignaciones: (id, tipo) => api.get(`/api/proyectos/${id}/asignaciones/${tipo}`),
+  asignar: (id, data) => api.post(`/api/proyectos/${id}/asignaciones`, data),
+  quitarAsignacion: (id, asignacionId) => api.del(`/api/proyectos/${id}/asignaciones/${asignacionId}`)
+}

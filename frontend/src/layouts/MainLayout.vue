@@ -282,6 +282,7 @@ const nombresModulos = {
   informes: 'Informes',
   periodos: 'Períodos contables',
   planilla: 'Pago de salarios',
+  proyectos: 'Proyectos y rentabilidad',
   reportes: 'Reportes',
   sucursales: 'Sucursales',
   usuarios: 'Usuarios'
@@ -295,6 +296,7 @@ const iconosModulos = {
   informes: 'analytics',
   periodos: 'date_range',
   planilla: 'payments',
+  proyectos: 'work_outline',
   reportes: 'assessment',
   sucursales: 'storefront',
   usuarios: 'group'
@@ -306,7 +308,11 @@ const nombresAcciones = {
   crear: 'Crear',
   editar: 'Editar',
   eliminar: 'Eliminar',
-  ver: 'Consultar'
+  ver: 'Consultar',
+  rentabilidad: 'Ver rentabilidad',
+  asignar_ingresos: 'Asignar ingresos',
+  asignar_compras: 'Asignar compras',
+  asignar_planilla: 'Asignar costos de planilla'
 }
 const gruposPermisos = computed(() => {
   const grupos = new Map()

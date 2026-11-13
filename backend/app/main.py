@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import os
 
-from app.routers import cuentas, asientos, meta, reportes, auth, control, operaciones
+from app.routers import cuentas, asientos, meta, reportes, auth, control, operaciones, proyectos
 
 app = FastAPI(title="OptimaTech API", version="1.0", description="API Contable - Catálogo 217 cuentas")
 
@@ -21,6 +21,7 @@ app.include_router(reportes.router)
 app.include_router(auth.router)
 app.include_router(control.router)
 app.include_router(operaciones.router)
+app.include_router(proyectos.router)
 
 @app.get("/", tags=["Root"])
 def root():
