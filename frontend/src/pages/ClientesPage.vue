@@ -44,13 +44,14 @@
         <q-card-section class="row q-col-gutter-sm">
           <div class="col-12 col-sm-4"><q-input v-model="form.codigo" label="Código del cliente *" placeholder="Ej.: CLI-003" hint="Opcional: déjalo vacío y se asignará el siguiente código CLI." maxlength="10" outlined dense /></div>
           <div class="col-12 col-sm-8"><q-input v-model="form.nombre" label="Nombre o razón social *" placeholder="Ej.: Empresa Ejemplo, S.A. de C.V." maxlength="150" outlined dense /></div>
-          <div class="col-12 col-sm-6"><q-input :model-value="form.nit" label="NIT *" placeholder="Ej.: 0614-010199-001-1" maxlength="17" inputmode="numeric" hint="Obligatorio: NIT de 14 dígitos o DUI de 9; los guiones se agregan solos." outlined dense @update:model-value="actualizarNit" /></div>
-          <div class="col-12 col-sm-6"><q-input :model-value="form.nrc" label="NRC *" placeholder="Ej.: 123456-7" maxlength="9" inputmode="numeric" hint="Obligatorio: de 2 a 8 dígitos; se guarda sin guiones." outlined dense @update:model-value="actualizarNrc" /></div>
-          <div class="col-12"><q-input v-model="form.giro" label="Giro o actividad económica *" placeholder="Ej.: Venta de equipos informáticos y soporte técnico" maxlength="250" outlined dense /></div>
+          <div class="col-12 col-sm-6"><q-select v-model="form.tipo_persona" :options="opcionesTipoPersona" emit-value map-options label="Tipo de cliente *" outlined dense /></div>
+          <div class="col-12 col-sm-6"><q-input :model-value="form.nit" label="NIT *" placeholder="Ej.: 0614-010199-001-1" maxlength="17" inputmode="numeric" hint="NIT de 14 dígitos o DUI de 9; los guiones se agregan solos." outlined dense @update:model-value="actualizarNit" /></div>
+          <div class="col-12"><q-toggle v-model="form.contribuyente_iva" label="Inscrito como contribuyente de IVA" @update:model-value="cambiaContribuyenteIva" /></div>
+          <div v-if="form.contribuyente_iva" class="col-12 col-sm-6"><q-input :model-value="form.nrc" label="NRC *" placeholder="Ej.: 123456-7" maxlength="9" inputmode="numeric" hint="Obligatorio para contribuyentes de IVA; se guarda sin guiones." outlined dense @update:model-value="actualizarNrc" /></div>
+          <div class="col-12"><q-input v-model="form.giro" :label="`Giro o actividad económica${requiereGiro ? ' *' : ''}`" :hint="requiereGiro ? 'Obligatorio para empresas o contribuyentes de IVA.' : 'Opcional para persona natural que compra como consumidor.'" placeholder="Ej.: Venta de equipos informáticos y soporte técnico" maxlength="250" outlined dense /></div>
           <div class="col-12"><q-input v-model="form.direccion" label="Dirección *" placeholder="Ej.: Colonia Escalón, San Salvador" maxlength="250" outlined dense /></div>
           <div class="col-12 col-sm-6"><q-input :model-value="form.telefono" type="tel" label="Teléfono" placeholder="2222-3333" maxlength="15" hint="Opcional: 8 dígitos; agrega +503 si incluyes el código de país." outlined dense @update:model-value="actualizarTelefono" /></div>
           <div class="col-12 col-sm-6"><q-input v-model="form.email" type="email" label="Correo" placeholder="compras@empresa.com" maxlength="100" outlined dense /></div>
-          <div class="col-12"><q-select v-model="form.cuenta_codigo" :options="cuentasCobrar" option-value="codigo" :option-label="c => `${c.codigo} · ${c.nombre}`" emit-value map-options label="Cuenta por cobrar" outlined dense /></div>
         </q-card-section>
         <q-card-actions align="right">
           <q-btn flat label="Cancelar" v-close-popup />
@@ -70,7 +71,6 @@ import { api } from '@/services/api.js'
 const $q = useQuasar()
 const auth = useAuthStore()
 const clientes = ref([])
-const cuentasCobrar = ref([])
 const filtro = ref('')
 const filtroEstado = ref('ACTIVO')
 const cargando = ref(false)
@@ -81,7 +81,12 @@ const editando = ref(false)
 const clienteId = ref(null)
 const error = ref('')
 const mensaje = ref('')
-const nuevo = () => ({ codigo: '', nombre: '', nit: '', nrc: '', giro: '', direccion: '', telefono: '', email: '', cuenta_codigo: '' })
+const nuevo = () => ({ codigo: '', nombre: '', nit: '', tipo_persona: 'NATURAL', contribuyente_iva: false, nrc: '', giro: '', direccion: '', telefono: '', email: '' })
+const opcionesTipoPersona = [
+  { label: 'Persona natural', value: 'NATURAL' },
+  { label: 'Empresa o institución (persona jurídica)', value: 'JURIDICA' }
+]
+const requiereGiro = computed(() => form.value.tipo_persona === 'JURIDICA' || form.value.contribuyente_iva)
 const form = ref(nuevo())
 const opcionesEstado = [
   { label: 'Activos', value: 'ACTIVO' },
@@ -92,6 +97,8 @@ const clientesVisibles = computed(() => filtroEstado.value === 'TODOS' ? cliente
 const columns = [
   { name: 'codigo', label: 'Código', field: 'codigo', align: 'left', sortable: true },
   { name: 'nombre', label: 'Nombre / razón social', field: 'nombre', align: 'left', sortable: true },
+  { name: 'tipo_persona', label: 'Tipo', field: r => r.tipo_persona === 'JURIDICA' ? 'Empresa / institución' : 'Persona natural' },
+  { name: 'contribuyente_iva', label: 'IVA', field: r => r.contribuyente_iva ? 'Contribuyente' : 'No inscrito' },
   { name: 'nit', label: 'NIT', field: r => formatearNit(r.nit) },
   { name: 'nrc', label: 'NRC', field: r => formatearNrc(r.nrc) },
   { name: 'giro', label: 'Giro / actividad', field: r => r.giro || '—', align: 'left' },
@@ -104,10 +111,8 @@ async function cargar() {
   cargando.value = true
   error.value = ''
   try {
-    const [c, a] = await Promise.all([api.get('/api/clientes'), api.get('/api/cuentas?q=1.1.3.')])
+    const c = await api.get('/api/clientes')
     clientes.value = c.clientes
-    const parents = new Set(a.cuentas.map(account => account.codigo_padre))
-    cuentasCobrar.value = a.cuentas.filter(account => account.codigo.startsWith('1.1.3.') && !parents.has(account.codigo))
   } catch (err) {
     error.value = err.message
   } finally {
@@ -119,7 +124,6 @@ function abrirNuevo() {
   error.value = ''
   mensaje.value = ''
   form.value = nuevo()
-  form.value.cuenta_codigo = cuentasCobrar.value.find(account => account.codigo === '1.1.3.01.02')?.codigo || cuentasCobrar.value[0]?.codigo || ''
   editando.value = false
   clienteId.value = null
   dialog.value = true
@@ -130,7 +134,7 @@ function abrirEdicion(row) {
   mensaje.value = ''
   editando.value = true
   clienteId.value = row.id
-  form.value = { codigo: row.codigo, nombre: row.nombre, nit: row.nit || '', nrc: row.nrc || '', giro: row.giro || '', direccion: row.direccion || '', telefono: row.telefono || '', email: row.email || '', cuenta_codigo: row.cuenta_codigo || '' }
+  form.value = { codigo: row.codigo, nombre: row.nombre, nit: row.nit || '', nrc: row.nrc || '', tipo_persona: row.tipo_persona || 'NATURAL', contribuyente_iva: Boolean(row.contribuyente_iva), giro: row.giro || '', direccion: row.direccion || '', telefono: row.telefono || '', email: row.email || '' }
   actualizarNit(row.nit || '')
   actualizarNrc(row.nrc || '')
   actualizarTelefono(row.telefono || '')
@@ -155,6 +159,10 @@ function formatearNit(value) {
 function actualizarNrc(value) {
   const digits = String(value || '').replace(/\D/g, '').slice(0, 8)
   form.value.nrc = digits.length > 6 ? `${digits.slice(0, 6)}-${digits.slice(6)}` : digits
+}
+
+function cambiaContribuyenteIva(value) {
+  if (!value) form.value.nrc = ''
 }
 
 function formatearNrc(value) {
@@ -196,13 +204,12 @@ function validarYNormalizar() {
   if (codigo && !/^CLI-\d{3,6}$/.test(codigo)) { error.value = 'El código debe tener el formato CLI-003, con 3 a 6 dígitos; también puedes dejarlo vacío para generarlo.'; return null }
   if (nombre.length < 2 || nombre.length > 150) { error.value = 'Escribe el nombre o razón social del cliente (de 2 a 150 caracteres).'; return null }
   if (!/^(?:\d{9}|\d{14}|\d{8}-\d|\d{4}-\d{6}-\d{3}-\d)$/.test(nit)) { error.value = 'El NIT es obligatorio: escribe 9 dígitos (formato DUI) o 14. Ejemplo: 0614-010199-001-1.'; return null }
-  if (!/^(?:\d{2,8}|\d{2,7}-\d)$/.test(nrc)) { error.value = 'El NRC es obligatorio y debe tener de 2 a 8 dígitos. Ejemplo: 123456-7.'; return null }
-  if (giro.length < 3 || !/[a-záéíóúñ]/i.test(giro)) { error.value = 'Escribe la actividad económica registrada del cliente (al menos 3 caracteres).'; return null }
+  if (form.value.contribuyente_iva && !/^(?:\d{2,8}|\d{2,7}-\d)$/.test(nrc)) { error.value = 'El NRC es obligatorio para un contribuyente de IVA y debe tener de 2 a 8 dígitos. Ejemplo: 123456-7.'; return null }
+  if (requiereGiro.value && (giro.length < 3 || !/[a-záéíóúñ]/i.test(giro))) { error.value = 'Escribe la actividad económica registrada del cliente (al menos 3 caracteres).'; return null }
   if (direccion.length < 5) { error.value = 'La dirección es obligatoria y debe tener al menos 5 caracteres.'; return null }
   if (telefono && (!/^[+0-9()\-\s]+$/.test(telefono) || ![8, 11].includes(telefonoDigits.length) || (telefonoDigits.length === 11 && !telefonoDigits.startsWith('503')))) { error.value = 'El teléfono debe tener 8 dígitos, o 11 si comienza con 503.'; return null }
   if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { error.value = 'El correo debe tener un formato como compras@empresa.com.'; return null }
-  if (!form.value.cuenta_codigo) { error.value = 'Selecciona la cuenta por cobrar del cliente.'; return null }
-  return { ...form.value, codigo: codigo || null, nombre, nit: nit.replace(/[-\s]/g, ''), nrc: nrc.replace(/-/g, ''), giro, direccion, telefono: telefono ? (telefonoDigits.length === 11 ? `+${telefonoDigits}` : telefonoDigits) : null, email: email || null }
+  return { ...form.value, codigo: codigo || null, nombre, nit: nit.replace(/[-\s]/g, ''), nrc: form.value.contribuyente_iva ? nrc.replace(/-/g, '') : null, giro: giro || null, direccion, telefono: telefono ? (telefonoDigits.length === 11 ? `+${telefonoDigits}` : telefonoDigits) : null, email: email || null }
 }
 
 async function guardar() {

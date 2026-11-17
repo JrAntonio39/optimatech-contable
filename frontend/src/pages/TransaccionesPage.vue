@@ -294,8 +294,7 @@ function filtrarCuentas(val, update) {
     opcionesCuentas.value = val
       ? lista
           .filter(o => o.label.toLowerCase().includes(val.toLowerCase()))
-          .slice(0, 50)
-      : lista.slice(0, 50)
+      : lista
   })
 }
 

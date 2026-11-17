@@ -6,7 +6,7 @@ import re
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
@@ -18,6 +18,12 @@ from app.services.auditoria import registrar
 router = APIRouter(prefix="/api", tags=["Operaciones"])
 CENT = Decimal("0.01")
 IVA = Decimal("0.13")
+CUENTA_CLIENTES_POR_COBRAR = "1.1.3.01.04"
+CUENTAS_CLIENTES_POR_LINEA = {
+    "1.1.3.01.01": {"5.1.2.02", "5.1.1.03", "5.1.1.04"},
+    "1.1.3.01.02": {"5.1.1.01", "5.1.1.02"},
+    "1.1.3.01.03": {"5.1.2.01", "5.1.3.01"},
+}
 
 
 def money(value) -> Decimal:
@@ -174,12 +180,14 @@ class PartyIn(BaseModel):
 
 
 class CustomerIn(PartyIn):
-    """Datos obligatorios de identificación fiscal para clientes."""
+    """Datos del cliente; NRC solo aplica a contribuyentes de IVA."""
     codigo: Optional[str] = Field(None, min_length=7, max_length=10, pattern=r"^CLI-\d{3,6}$")
     nombre: str = Field(..., min_length=2, max_length=150)
     nit: str = Field(..., min_length=9, max_length=17)
-    nrc: str = Field(..., min_length=2, max_length=9)
-    giro: str = Field(..., min_length=3, max_length=250)
+    tipo_persona: str = Field("NATURAL", pattern=r"^(NATURAL|JURIDICA)$")
+    contribuyente_iva: bool = False
+    nrc: Optional[str] = Field(None, max_length=9)
+    giro: Optional[str] = Field(None, max_length=250)
     direccion: str = Field(..., min_length=5, max_length=250)
 
     @field_validator("codigo", mode="before")
@@ -200,17 +208,31 @@ class CustomerIn(PartyIn):
     @classmethod
     def validar_nrc_cliente(cls, value):
         raw = str(value or "").strip()
+        if not raw:
+            return None
         if not re.fullmatch(r"\d{2,8}|\d{2,7}-\d", raw):
-            raise ValueError("El NRC es obligatorio y debe tener de 2 a 8 dígitos. Ejemplo: 123456-7")
+            raise ValueError("El NRC debe tener de 2 a 8 dígitos. Ejemplo: 123456-7")
         return raw.replace("-", "")
+
+    @model_validator(mode="after")
+    def validar_nrc_segun_registro_iva(self):
+        if self.contribuyente_iva and not self.nrc:
+            raise ValueError("El NRC es obligatorio para clientes inscritos como contribuyentes de IVA")
+        if (self.tipo_persona == "JURIDICA" or self.contribuyente_iva) and not self.giro:
+            raise ValueError("El giro o actividad económica es obligatorio para empresas o contribuyentes de IVA")
+        if not self.contribuyente_iva:
+            self.nrc = None
+        return self
 
     @field_validator("giro", mode="before")
     @classmethod
     def validar_giro_cliente(cls, value):
-        cleaned = " ".join(str(value or "").split())
-        if len(cleaned) < 3 or not any(char.isalpha() for char in cleaned):
-            raise ValueError("El giro o actividad económica es obligatorio; escribe la actividad registrada del cliente")
-        return cleaned
+        if value is None:
+            return None
+        cleaned = " ".join(str(value).split())
+        if cleaned and (len(cleaned) < 3 or not any(char.isalpha() for char in cleaned)):
+            raise ValueError("El giro debe describir una actividad económica con texto")
+        return cleaned or None
 
     @field_validator("direccion", mode="before")
     @classmethod
@@ -405,7 +427,7 @@ def invoice_products(db: Session = Depends(get_db), user: Usuario = Depends(requ
 
 @router.get("/clientes")
 def customers(db: Session = Depends(get_db), user: Usuario = Depends(require_permission("facturas", "ver"))):
-    rows = db.execute(text("SELECT id,codigo,nombre,nit,nrc,giro,direccion,telefono,email,cuenta_codigo,sucursal_id,estado FROM cliente ORDER BY nombre")).mappings().all()
+    rows = db.execute(text("SELECT id,codigo,nombre,nit,nrc,tipo_persona,contribuyente_iva,giro,direccion,telefono,email,cuenta_codigo,sucursal_id,estado FROM cliente ORDER BY nombre")).mappings().all()
     return {"clientes": [dict(r) for r in rows]}
 
 
@@ -425,8 +447,8 @@ def create_customer(data: CustomerIn, db: Session = Depends(get_db), user: Usuar
         raise HTTPException(409, "El código de cliente ya existe")
     if data.cuenta_codigo:
         check_leaf_account(db, data.cuenta_codigo, "Cliente")
-    result = db.execute(text("""INSERT INTO cliente (codigo,nombre,nit,nrc,giro,direccion,telefono,email,cuenta_codigo,sucursal_id,estado)
-      VALUES (:codigo,:nombre,:nit,:nrc,:giro,:direccion,:telefono,:email,:cuenta,:sucursal,'ACTIVO') RETURNING id"""),
+    result = db.execute(text("""INSERT INTO cliente (codigo,nombre,nit,nrc,tipo_persona,contribuyente_iva,giro,direccion,telefono,email,cuenta_codigo,sucursal_id,estado)
+      VALUES (:codigo,:nombre,:nit,:nrc,:tipo_persona,:contribuyente_iva,:giro,:direccion,:telefono,:email,:cuenta,:sucursal,'ACTIVO') RETURNING id"""),
       {**data.model_dump(), "codigo": codigo, "nombre": data.nombre.strip(), "cuenta": data.cuenta_codigo, "sucursal": data.sucursal_id}).mappings().first()
     after = data.model_dump(mode="json")
     after["codigo"] = codigo
@@ -445,8 +467,9 @@ def update_customer(cliente_id: int, data: CustomerIn, db: Session = Depends(get
         raise HTTPException(409, "Ese código ya pertenece a otro cliente")
     if data.cuenta_codigo:
         check_leaf_account(db, data.cuenta_codigo, "Cliente")
-    before = {key: current.get(key) for key in ("codigo", "nombre", "nit", "nrc", "giro", "direccion", "telefono", "email", "cuenta_codigo", "sucursal_id", "estado")}
-    db.execute(text("""UPDATE cliente SET codigo=:codigo,nombre=:nombre,nit=:nit,nrc=:nrc,giro=:giro,
+    before = {key: current.get(key) for key in ("codigo", "nombre", "nit", "nrc", "tipo_persona", "contribuyente_iva", "giro", "direccion", "telefono", "email", "cuenta_codigo", "sucursal_id", "estado")}
+    db.execute(text("""UPDATE cliente SET codigo=:codigo,nombre=:nombre,nit=:nit,nrc=:nrc,
+        tipo_persona=:tipo_persona,contribuyente_iva=:contribuyente_iva,giro=:giro,
         direccion=:direccion,telefono=:telefono,email=:email,cuenta_codigo=:cuenta,sucursal_id=:sucursal
         WHERE id=:id"""),
         {**data.model_dump(), "id": cliente_id, "codigo": codigo, "nombre": data.nombre,
@@ -590,6 +613,8 @@ def create_invoice(data: InvoiceIn, db: Session = Depends(get_db), user: Usuario
     check_period(db,data.periodo_id,data.fecha)
     client=db.execute(text("SELECT * FROM cliente WHERE id=:i AND estado='ACTIVO'"),{"i":data.cliente_id}).mappings().first()
     if not client: raise HTTPException(400,"Cliente inexistente o inactivo")
+    if data.tipo_dte == "CCF" and not client["contribuyente_iva"]:
+        raise HTTPException(400, "El CCF requiere un cliente registrado como contribuyente de IVA. Para una persona no inscrita, seleccione Factura de Consumidor Final.")
     if data.tipo_dte == "CCF" and any(not client[field] or not str(client[field]).strip() for field in ("nit", "nrc", "giro", "direccion")):
         raise HTTPException(400, "Para un CCF registre en el cliente: NIT, NRC, giro o actividad y dirección")
     if data.tipo_dte == "CCF":
@@ -685,7 +710,7 @@ def delete_draft_invoice(
 
 @router.post("/facturas/{doc_id}/enviar")
 def send_invoice(doc_id:int,db:Session=Depends(get_db),user:Usuario=Depends(require_permission("facturas","aprobar"))):
-    doc=db.execute(text("SELECT f.*,c.cuenta_codigo FROM factura f JOIN cliente c ON c.id=f.cliente_id WHERE f.id=:i FOR UPDATE"),{"i":doc_id}).mappings().first()
+    doc=db.execute(text("SELECT f.* FROM factura f WHERE f.id=:i FOR UPDATE"),{"i":doc_id}).mappings().first()
     if not doc: raise HTTPException(404,"Factura no encontrada")
     if doc["estado"]!="BORRADOR": raise HTTPException(409,"Solo se envían facturas en borrador")
     lines=db.execute(text("SELECT descripcion,cantidad,precio_unitario,tipo_venta,cuenta_ingreso_codigo FROM factura_detalle WHERE factura_id=:i ORDER BY id"),{"i":doc_id}).mappings().all()
@@ -693,13 +718,35 @@ def send_invoice(doc_id:int,db:Session=Depends(get_db),user:Usuario=Depends(requ
     subtotal=money(sum((money(x["cantidad"]*x["precio_unitario"]) for x in lines),Decimal(0)))
     base_gravada=money(sum((money(x["cantidad"]*x["precio_unitario"]) for x in lines if x["tipo_venta"]=="GRAVADA"),Decimal(0)))
     iva=money(base_gravada*IVA); total=subtotal+iva
+    saldos_por_cuenta = {}
+    for line in lines:
+        ingreso = line["cuenta_ingreso_codigo"]
+        cuenta_cxc = next((account for account, income_accounts in CUENTAS_CLIENTES_POR_LINEA.items()
+                           if ingreso in income_accounts), CUENTA_CLIENTES_POR_COBRAR)
+        importe = money(line["cantidad"] * line["precio_unitario"])
+        group = saldos_por_cuenta.setdefault(cuenta_cxc, {"subtotal": Decimal(0), "gravada": Decimal(0), "iva": Decimal(0)})
+        group["subtotal"] += importe
+        if line["tipo_venta"] == "GRAVADA":
+            group["gravada"] += importe
+    grupos_gravados = [g for g in saldos_por_cuenta.values() if g["gravada"]]
+    iva_asignado = Decimal(0)
+    for group in grupos_gravados[:-1]:
+        group["iva"] = money(group["gravada"] * IVA)
+        iva_asignado += group["iva"]
+    if grupos_gravados:
+        grupos_gravados[-1]["iva"] = iva - iva_asignado
     if doc["condicion_operacion"] == "CREDITO":
-        settlement_account = doc["cuenta_codigo"] or "1.1.3.01.02"
+        settlement_account = CUENTA_CLIENTES_POR_COBRAR
         settlement_label = f"Cliente {doc['numero']}"
     else:
         settlement_account = doc["cuenta_pago_codigo"] or "1.1.1.01"
         settlement_label = f"Cobro factura {doc['numero']}"
-    journal=[{"cuenta_codigo":settlement_account,"debe":total,"haber":0,"descripcion":settlement_label}]
+    if doc["condicion_operacion"] == "CREDITO":
+        journal = [{"cuenta_codigo": account, "debe": money(group["subtotal"] + group["iva"]), "haber": 0,
+                    "descripcion": f"{settlement_label} - {account}"}
+                   for account, group in sorted(saldos_por_cuenta.items())]
+    else:
+        journal=[{"cuenta_codigo":settlement_account,"debe":total,"haber":0,"descripcion":settlement_label}]
     for line in lines: journal.append({"cuenta_codigo":line["cuenta_ingreso_codigo"],"debe":0,"haber":money(line["cantidad"]*line["precio_unitario"]),"descripcion":line["descripcion"]})
     journal.append({"cuenta_codigo":"2.1.10.01","debe":0,"haber":iva,"descripcion":"IVA débito fiscal 13%"})
     try:
