@@ -34,5 +34,11 @@ export const proyectosService = {
   fuentes: (id, tipo) => api.get(`/api/proyectos/${id}/fuentes/${tipo}`),
   asignaciones: (id, tipo) => api.get(`/api/proyectos/${id}/asignaciones/${tipo}`),
   asignar: (id, data) => api.post(`/api/proyectos/${id}/asignaciones`, data),
-  quitarAsignacion: (id, asignacionId) => api.del(`/api/proyectos/${id}/asignaciones/${asignacionId}`)
+  quitarAsignacion: (id, asignacionId) => api.del(`/api/proyectos/${id}/asignaciones/${asignacionId}`),
+  reporteRentabilidad: () => api.get('/api/proyectos/reporte-rentabilidad'),
+  empleadosActivos: () => api.get('/api/proyectos/empleados-activos'),
+  horas: id => api.get(`/api/proyectos/${id}/horas`),
+  registrarHoras: (id, data) => api.post(`/api/proyectos/${id}/horas`, data),
+  registrarHorasLote: (id, data) => api.post(`/api/proyectos/${id}/horas/lote`, data),
+  quitarHoras: (id, entryId) => api.del(`/api/proyectos/${id}/horas/${entryId}`)
 }

@@ -989,11 +989,27 @@ def create_payroll(data:PayrollIn,db:Session=Depends(get_db),user:Usuario=Depend
     ids=[x.empleado_id for x in data.detalles]
     if len(ids)!=len(set(ids)): raise HTTPException(400,"No repita empleados en la misma planilla")
     by_id={}
+    # Serializa la creación de planillas del mismo empleado para el mismo mes,
+    # incluso si dos usuarios intentan guardarlas al mismo tiempo.
+    for employee_id in sorted(ids):
+        db.execute(text("SELECT id FROM empleado WHERE id=:id FOR UPDATE"),{"id":employee_id}).first()
     for employee_id in ids:
-        employee_row=db.execute(text("SELECT id,salario_base,sucursal_id FROM empleado WHERE id=:id AND estado='ACTIVO'"),{"id":employee_id}).mappings().first()
+        employee_row=db.execute(text("SELECT id,codigo,nombres,apellidos,salario_base,sucursal_id FROM empleado WHERE id=:id AND estado='ACTIVO'"),{"id":employee_id}).mappings().first()
         if not employee_row: raise HTTPException(400,"Uno o más empleados no existen o están inactivos")
         if employee_row["sucursal_id"] != data.sucursal_id:
             raise HTTPException(400,f"El empleado {employee_id} no pertenece a la sucursal seleccionada para la planilla")
+        duplicate=db.execute(text("""SELECT p.codigo
+          FROM planilla_detalle d
+          JOIN planilla p ON p.id=d.planilla_id
+          LEFT JOIN asiento a ON a.id=p.asiento_id
+          WHERE d.empleado_id=:empleado_id AND p.periodo=:periodo AND p.tipo='MENSUAL'
+            AND (a.estado IS NULL OR a.estado NOT IN ('RECHAZADO','ANULADO'))
+          ORDER BY p.id DESC LIMIT 1"""),
+          {"empleado_id":employee_id,"periodo":data.periodo}).scalar()
+        if duplicate:
+            raise HTTPException(409,
+                f"{employee_row['codigo']} - {employee_row['nombres']} {employee_row['apellidos']} ya está incluido en la planilla mensual {duplicate} del período {data.periodo}. "
+                "Cada empleado solo puede tener una planilla mensual por período.")
         by_id[employee_id]=employee_row
     for line in data.detalles:
         if line.cuenta_gasto_codigo not in ("4.1.1.09", "4.1.3.01", "4.1.4.01"):
